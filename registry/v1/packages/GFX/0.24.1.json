@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "name": "GFX",
+  "version": "0.24.1",
+  "requires": {
+    "silex": ">=0.38.0"
+  },
+  "repository": "Matanek/Silex-Lib-GFX",
+  "extensions": [],
+  "archive": {
+    "url": "https://github.com/Matanek/Silex-Lib-GFX/releases/download/v0.24.1/GFX-0.24.1.tar.gz",
+    "sha256": "174caecd78e356f3fb22d2729e82255682c6f7c406339540f6dfa33f50d23d57"
+  }
+}
