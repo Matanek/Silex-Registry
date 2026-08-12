@@ -1,6 +1,15 @@
 # Contributing a package release
 
-Create one manifest per released package version:
+Prefer the Silex commands to release the package and prepare its registry
+proposal:
+
+```sh
+silex release path/to/Package
+silex publish path/to/Package
+```
+
+The first command requires the exact package tag on GitHub and an authenticated
+GitHub CLI. The second writes one manifest per released package version:
 
 ```text
 registry/v1/packages/Name/MAJOR.MINOR.PATCH.json

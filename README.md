@@ -26,10 +26,12 @@ they must not be committed.
 
 ## Publish a release
 
-1. Publish the package archive from a tagged package release.
-2. Calculate and publish its SHA-256 checksum.
-3. Add `registry/v1/packages/Name/MAJOR.MINOR.PATCH.json` in a pull request.
-4. Let the registry check validate the manifest and generated indexes.
+1. Commit the package, create its exact `vMAJOR.MINOR.PATCH` tag, and push both.
+2. Run `silex release path/to/Package` to publish the archive and checksum.
+3. Run `silex publish path/to/Package` from a checkout containing
+   `Silex-Registry/` to prepare the immutable version manifest.
+4. Add that manifest in a pull request and let the registry check validate the
+   generated indexes.
 5. Merge only after the archive URL and checksum have been reviewed.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete manifest contract and
