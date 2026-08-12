@@ -109,12 +109,12 @@
         <div class="section-heading publish-heading">
           <div>
             <p class="eyebrow">Package publication</p>
-            <h2 id="publish-title">One release.<br>One manifest.</h2>
+            <h2 id="publish-title">One release.<br>One command.</h2>
           </div>
           <p>
-            The registry is reviewed through pull requests. It records where an
-            immutable archive lives, which Silex versions it supports, and the
-            checksum clients must verify before installation.
+            <code>silex publish</code> verifies the tagged archive and its
+            checksum, then prepares the immutable registry manifest. A pull
+            request keeps every publication reviewable before installation.
           </p>
         </div>
 
@@ -130,31 +130,25 @@
             </li>
             <li>
               <span>03</span>
-              <div><h3>Add one manifest</h3><p>Create <code>registry/v1/packages/Name/Version.json</code> without editing any existing release.</p></div>
+              <div><h3>Prepare the publication</h3><p>Run <code>silex publish path/to/Package</code> from a checkout containing <code>Silex-Registry</code>. Silex verifies the release and writes the version manifest.</p></div>
             </li>
             <li>
               <span>04</span>
-              <div><h3>Open a pull request</h3><p>Link the package release, explain the checksum, and let the registry checks validate the complete index.</p></div>
+              <div><h3>Open a pull request</h3><p>Review the prepared manifest and let the registry checks validate the complete index. Existing releases remain immutable.</p></div>
             </li>
           </ol>
 
-          <div class="manifest-window" aria-label="Example package release manifest">
+          <div class="manifest-window" aria-label="Publish a package with the Silex command line">
             <div class="card-titlebar">
-              <span class="file-mark" aria-hidden="true">{ }</span>
-              <strong>Example/1.0.0.json</strong>
+              <span class="file-mark" aria-hidden="true">$</span>
+              <strong>Publish Example 1.0.0</strong>
             </div>
-            <pre><code>{
-  <span class="key">"schema"</span>: 1,
-  <span class="key">"name"</span>: <span class="value">"Example"</span>,
-  <span class="key">"version"</span>: <span class="value">"1.0.0"</span>,
-  <span class="key">"requires"</span>: {
-    <span class="key">"silex"</span>: <span class="value">">=0.38.0"</span>
-  },
-  <span class="key">"archive"</span>: {
-    <span class="key">"url"</span>: <span class="value">"https://…/Example-1.0.0.tar.gz"</span>,
-    <span class="key">"sha256"</span>: <span class="value">"012345…abcdef"</span>
-  }
-}</code></pre>
+            <pre><code><span class="key">$</span> silex publish Packages/Example
+
+<span class="value">silex: prepared Example@1.0.0
+for registry review in
+Silex-Registry/registry/v1/packages/
+Example/1.0.0.json</span></code></pre>
             <a href="https://github.com/Matanek/Silex-Registry/blob/main/CONTRIBUTING.md">Read the complete manifest contract <span aria-hidden="true">→</span></a>
           </div>
         </div>
