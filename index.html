@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="Contribute to Silex and publish versioned packages through the public Silex registry."
+    >
+    <meta name="theme-color" content="#0c0c0d">
+    <title>Silex Registry — Build. Release. Share.</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="https://silex-lang.org" aria-label="Silex home">
+        <span class="brand-mark" aria-hidden="true">S</span>
+        <span>Silex</span>
+        <span class="brand-context">Registry</span>
+      </a>
+      <nav aria-label="Primary navigation">
+        <a href="#contribute">Contribute</a>
+        <a href="#publish">Publish</a>
+        <a href="v1/index.json">Registry API</a>
+        <a href="https://github.com/Matanek/Silex-Registry">GitHub</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow">Public package registry · v1</p>
+          <h1 id="hero-title">Build it.<br><span>Release it.</span><br>Share it.</h1>
+          <p class="lede">
+            Silex grows through working software. Improve the language, refine
+            its packages, or publish a capability that other applications can
+            depend on.
+          </p>
+          <div class="actions">
+            <a class="button button-primary" href="#publish">Publish a package</a>
+            <a class="button button-secondary" href="https://github.com/Matanek/Silex">Contribute to Silex</a>
+          </div>
+        </div>
+
+        <aside class="registry-card" aria-labelledby="registry-card-title">
+          <div class="card-titlebar">
+            <span class="status-dot" aria-hidden="true"></span>
+            <strong id="registry-card-title">registry.silex-lang.org</strong>
+            <span>live</span>
+          </div>
+          <dl class="registry-facts">
+            <div>
+              <dt>Format</dt>
+              <dd>Static JSON</dd>
+            </div>
+            <div>
+              <dt>Contract</dt>
+              <dd>Versioned &amp; immutable</dd>
+            </div>
+            <div>
+              <dt>Official packages</dt>
+              <dd>STD · GFX</dd>
+            </div>
+          </dl>
+          <a class="endpoint" href="v1/index.json">
+            <span>GET</span>
+            <code>/v1/index.json</code>
+            <b aria-hidden="true">→</b>
+          </a>
+        </aside>
+      </section>
+
+      <section class="section" id="contribute" aria-labelledby="contribute-title">
+        <div class="section-heading split-heading">
+          <div>
+            <p class="eyebrow">Choose your contribution</p>
+            <h2 id="contribute-title">Move Silex forward.</h2>
+          </div>
+          <p>
+            Start from a concrete use case. A focused fix, a readable example,
+            or a small package with a clear intention can reshape the whole
+            developer experience.
+          </p>
+        </div>
+
+        <div class="contribution-grid">
+          <article class="contribution-card">
+            <span class="card-number">01</span>
+            <h3>Language &amp; toolchain</h3>
+            <p>Improve diagnostics, semantics, native compilation, tooling, or the executable examples that prove a feature works.</p>
+            <a href="https://github.com/Matanek/Silex">Explore Silex <span aria-hidden="true">→</span></a>
+          </article>
+          <article class="contribution-card">
+            <span class="card-number">02</span>
+            <h3>Official packages</h3>
+            <p>Strengthen the standard library or the GFX application stack through direct, intention-oriented public APIs.</p>
+            <a href="#packages">See official packages <span aria-hidden="true">→</span></a>
+          </article>
+          <article class="contribution-card">
+            <span class="card-number">03</span>
+            <h3>Community packages</h3>
+            <p>Package one useful capability, release it immutably, and propose its manifest to the public registry.</p>
+            <a href="#publish">Read the release path <span aria-hidden="true">→</span></a>
+          </article>
+        </div>
+      </section>
+
+      <section class="section publish" id="publish" aria-labelledby="publish-title">
+        <div class="section-heading publish-heading">
+          <div>
+            <p class="eyebrow">Package publication</p>
+            <h2 id="publish-title">One release.<br>One manifest.</h2>
+          </div>
+          <p>
+            The registry is reviewed through pull requests. It records where an
+            immutable archive lives, which Silex versions it supports, and the
+            checksum clients must verify before installation.
+          </p>
+        </div>
+
+        <div class="publish-layout">
+          <ol class="release-steps">
+            <li>
+              <span>01</span>
+              <div><h3>Tag the package</h3><p>Set the semantic version and Silex compatibility range, then publish the complete package from that exact commit.</p></div>
+            </li>
+            <li>
+              <span>02</span>
+              <div><h3>Publish the archive</h3><p>Create an immutable release archive and calculate its lowercase SHA-256 checksum.</p></div>
+            </li>
+            <li>
+              <span>03</span>
+              <div><h3>Add one manifest</h3><p>Create <code>registry/v1/packages/Name/Version.json</code> without editing any existing release.</p></div>
+            </li>
+            <li>
+              <span>04</span>
+              <div><h3>Open a pull request</h3><p>Link the package release, explain the checksum, and let the registry checks validate the complete index.</p></div>
+            </li>
+          </ol>
+
+          <div class="manifest-window" aria-label="Example package release manifest">
+            <div class="card-titlebar">
+              <span class="file-mark" aria-hidden="true">{ }</span>
+              <strong>Example/1.0.0.json</strong>
+            </div>
+            <pre><code>{
+  <span class="key">"schema"</span>: 1,
+  <span class="key">"name"</span>: <span class="value">"Example"</span>,
+  <span class="key">"version"</span>: <span class="value">"1.0.0"</span>,
+  <span class="key">"requires"</span>: {
+    <span class="key">"silex"</span>: <span class="value">">=0.38.0"</span>
+  },
+  <span class="key">"archive"</span>: {
+    <span class="key">"url"</span>: <span class="value">"https://…/Example-1.0.0.tar.gz"</span>,
+    <span class="key">"sha256"</span>: <span class="value">"012345…abcdef"</span>
+  }
+}</code></pre>
+            <a href="https://github.com/Matanek/Silex-Registry/blob/main/CONTRIBUTING.md">Read the complete manifest contract <span aria-hidden="true">→</span></a>
+          </div>
+        </div>
+      </section>
+
+      <section class="section packages" id="packages" aria-labelledby="packages-title">
+        <div class="section-heading compact-heading">
+          <div>
+            <p class="eyebrow">Official foundation</p>
+            <h2 id="packages-title">Packages maintained with Silex.</h2>
+          </div>
+        </div>
+        <div class="package-list">
+          <a href="https://github.com/Matanek/Silex-Lib-STD">
+            <strong>STD</strong>
+            <span>Standard capabilities for Silex applications.</span>
+            <b aria-hidden="true">→</b>
+          </a>
+          <a href="https://github.com/Matanek/Silex-Lib-GFX">
+            <strong>GFX</strong>
+            <span>2D, 3D, GPU and application capabilities.</span>
+            <b aria-hidden="true">→</b>
+          </a>
+        </div>
+      </section>
+
+      <section class="closing" aria-labelledby="closing-title">
+        <p class="eyebrow">A small ecosystem, deliberately built</p>
+        <h2 id="closing-title">Bring one useful idea.</h2>
+        <p>Make it direct to use, complete enough to prove, and clear enough for the next developer to discover.</p>
+        <a class="button button-primary" href="https://github.com/Matanek/Silex-Registry">Open the registry repository</a>
+      </section>
+    </main>
+
+    <footer>
+      <span>Silex is experimental software.</span>
+      <div>
+        <a href="https://silex-lang.org">silex-lang.org</a>
+        <a href="https://github.com/Matanek/Silex-Registry">Source</a>
+        <a href="v1/index.json">Registry API</a>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -38,5 +38,7 @@ jobs:
 
       - name: Verify generated package indexes
         run: |
+          test -f dist/index.html
+          test -f dist/styles.css
           test -f dist/v1/packages/STD/index.json
           test -f dist/v1/packages/GFX/index.json

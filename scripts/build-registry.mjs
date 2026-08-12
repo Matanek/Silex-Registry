@@ -1,4 +1,4 @@
-import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
 const sourceRoot = resolve("registry/v1");
@@ -128,6 +128,8 @@ for (const packageDirectory of packageDirectories) {
 await rm(outputRoot, { recursive: true, force: true });
 await mkdir(dirname(outputRoot), { recursive: true });
 await cp(sourceRoot, outputRoot, { recursive: true });
+await copyFile(resolve("index.html"), join(dirname(outputRoot), "index.html"));
+await copyFile(resolve("styles.css"), join(dirname(outputRoot), "styles.css"));
 
 for (const packageDirectory of packageDirectories) {
   const sourcePackageRoot = join(sourcePackagesRoot, packageDirectory.name);
