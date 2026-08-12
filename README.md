@@ -32,7 +32,12 @@ they must not be committed.
    `Silex-Registry/` to prepare the immutable version manifest.
 4. Add that manifest in a pull request and let the registry check validate the
    generated indexes.
-5. Merge only after the archive URL and checksum have been reviewed.
+5. Merge only after the assigned GitHub repository, namespace extension policy,
+   archive URL, and checksum have been reviewed.
+
+The registry locks one package name to one GitHub repository. New release
+manifests copy the package's `extensions` policy and the installer verifies it
+against the checksummed archive before recording a local registry proof.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete manifest contract and
 local validation command.

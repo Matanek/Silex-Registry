@@ -5,6 +5,7 @@ const sourceRoot = resolve("registry/v1");
 const outputRoot = resolve(process.argv[2] ?? "dist/v1");
 const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
 const checksumPattern = /^[0-9a-f]{64}$/;
+const repositoryPattern = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
 if (sourceRoot === outputRoot) {
   throw new Error("the generated registry must use a distinct output directory");
@@ -65,6 +66,17 @@ function compareVersions(left, right) {
   return comparePrerelease(left.parsed.prerelease, right.parsed.prerelease);
 }
 
+function repositoryFromArchive(url) {
+  const match = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/releases\/download\//.exec(url);
+  return match?.[1] ?? null;
+}
+
+function validExtensionGrant(packageName, grant) {
+  if (typeof grant !== "string" || !grant.startsWith(`${packageName}.`)) return false;
+  const child = grant.slice(packageName.length + 1);
+  return child === "*" || /^[A-Za-z_][A-Za-z0-9_]*$/.test(child);
+}
+
 const rootIndex = await readJson(join(sourceRoot, "index.json"), "registry index");
 if (rootIndex.schema !== 1) throw new Error("registry index uses an unsupported schema");
 if (rootIndex.endpoints?.releases !== "packages/{package}/index.json") {
@@ -101,6 +113,7 @@ for (const packageDirectory of packageDirectories) {
     throw new Error(`${packageDirectory.name} has no version manifest`);
   }
 
+  let canonicalRepository = null;
   for (const entry of versionFiles) {
     const label = `${packageDirectory.name}/${entry.file}`;
     const manifest = await readJson(join(packageRoot, entry.file), label);
@@ -119,6 +132,29 @@ for (const packageDirectory of packageDirectories) {
       throw new Error(`${label} has an invalid archive URL`);
     }
     if (archiveUrl.protocol !== "https:") throw new Error(`${label} archive URL must use HTTPS`);
+    const archiveRepository = repositoryFromArchive(manifest.archive.url);
+    if (archiveRepository === null) throw new Error(`${label} archive must belong to a GitHub release repository`);
+    if (canonicalRepository !== null && canonicalRepository !== archiveRepository) {
+      throw new Error(`${label} changes the repository assigned to package ${packageDirectory.name}`);
+    }
+    canonicalRepository = archiveRepository;
+    if (manifest.repository !== undefined) {
+      if (typeof manifest.repository !== "string" || !repositoryPattern.test(manifest.repository)) {
+        throw new Error(`${label} has an invalid repository identity`);
+      }
+      if (manifest.repository !== archiveRepository) {
+        throw new Error(`${label} repository does not own its archive`);
+      }
+      if (!Array.isArray(manifest.extensions)) throw new Error(`${label} has no extension policy`);
+      for (const [index, grant] of manifest.extensions.entries()) {
+        if (!validExtensionGrant(manifest.name, grant)) throw new Error(`${label} has an invalid extension grant`);
+        if (index > 0 && manifest.extensions[index - 1].localeCompare(grant, "en") >= 0) {
+          throw new Error(`${label} extension grants must be sorted and unique`);
+        }
+      }
+    } else if (manifest.extensions !== undefined) {
+      throw new Error(`${label} cannot grant extensions without a repository identity`);
+    }
     if (!checksumPattern.test(manifest.archive?.sha256 ?? "")) {
       throw new Error(`${label} has an invalid SHA-256 checksum`);
     }
