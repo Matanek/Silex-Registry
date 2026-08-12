@@ -37,7 +37,7 @@ Generated package indexes must not be committed. Build and validate the full
 registry locally with:
 
 ```sh
-node scripts/build-registry.mjs dist/registry/v1
+node scripts/build-registry.mjs dist/v1
 ```
 
 The pull request should link to the package release and explain how the
