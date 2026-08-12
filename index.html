@@ -109,12 +109,12 @@
         <div class="section-heading publish-heading">
           <div>
             <p class="eyebrow">Package publication</p>
-            <h2 id="publish-title">One release.<br>One command.</h2>
+            <h2 id="publish-title">One release.<br>Two commands.</h2>
           </div>
           <p>
-            <code>silex publish</code> verifies the tagged archive and its
-            checksum, then prepares the immutable registry manifest. A pull
-            request keeps every publication reviewable before installation.
+            <code>silex release</code> publishes the tagged archive and checksum.
+            <code>silex publish</code> verifies them and prepares the immutable
+            registry manifest for review.
           </p>
         </div>
 
@@ -126,7 +126,7 @@
             </li>
             <li>
               <span>02</span>
-              <div><h3>Publish the archive</h3><p>Create an immutable release archive and calculate its lowercase SHA-256 checksum.</p></div>
+              <div><h3>Release the package</h3><p>Run <code>silex release path/to/Package</code>. Silex creates the archive and lowercase SHA-256 checksum, then publishes both in the GitHub Release.</p></div>
             </li>
             <li>
               <span>03</span>
@@ -143,7 +143,10 @@
               <span class="file-mark" aria-hidden="true">$</span>
               <strong>Publish Example 1.0.0</strong>
             </div>
-            <pre><code><span class="key">$</span> silex publish Packages/Example
+            <pre><code><span class="key">$</span> silex release Packages/Example
+<span class="value">silex: released Example@1.0.0</span>
+
+<span class="key">$</span> silex publish Packages/Example
 
 <span class="value">silex: prepared Example@1.0.0
 for registry review in
