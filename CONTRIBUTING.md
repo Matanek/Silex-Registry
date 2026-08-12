@@ -26,6 +26,8 @@ manifest has this shape:
   "requires": {
     "silex": ">=0.38.0"
   },
+  "repository": "Matanek/Silex-Lib-STD",
+  "extensions": [],
   "archive": {
     "url": "https://github.com/Matanek/Silex-Lib-STD/releases/download/v0.16.2/STD-0.16.2.tar.gz",
     "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -38,7 +40,11 @@ Requirements:
 - `schema` is `1`;
 - `version` and the file name use semantic versioning;
 - `requires.silex` is a non-empty compatibility range;
-- the archive URL uses HTTPS and identifies an immutable published archive;
+- `repository` identifies the GitHub repository permanently assigned to the
+  package name;
+- `extensions` is sorted, contains only direct child grants, and is empty when
+  the namespace is closed;
+- the archive URL identifies an immutable release of that exact repository;
 - `sha256` contains exactly 64 lowercase hexadecimal characters;
 - an existing release manifest is never edited or replaced.
 
