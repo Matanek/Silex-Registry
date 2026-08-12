@@ -1,0 +1,42 @@
+name: Check registry
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the registry
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Protect published manifests
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        shell: bash
+        run: |
+          invalid=0
+          while IFS=$'\t' read -r status path remainder; do
+            if [[ "$path" == registry/v1/packages/*/*.json && "$status" != A* ]]; then
+              echo "Published manifest must remain immutable: $status $path${remainder:+ -> $remainder}" >&2
+              invalid=1
+            fi
+          done < <(git diff --name-status "$BASE_SHA" HEAD -- registry/v1/packages)
+          exit "$invalid"
+
+      - name: Validate and build the registry
+        run: node scripts/build-registry.mjs dist/registry/v1
+
+      - name: Verify generated package indexes
+        run: |
+          test -f dist/registry/v1/packages/STD/index.json
+          test -f dist/registry/v1/packages/GFX/index.json
