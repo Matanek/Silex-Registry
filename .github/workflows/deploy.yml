@@ -1,0 +1,71 @@
+name: Deploy registry
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: registry-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: vars.VPS_DEPLOY_ENABLED == 'true'
+    environment: production
+    runs-on: ubuntu-latest
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+      VPS_SSH_PORT: ${{ vars.VPS_SSH_PORT || '22' }}
+      VPS_REGISTRY_ROOT: ${{ vars.VPS_REGISTRY_ROOT || '/srv/silex/registry' }}
+    steps:
+      - name: Check out the registry
+        uses: actions/checkout@v6
+
+      - name: Validate and build the registry
+        run: node scripts/build-registry.mjs dist/registry/v1
+
+      - name: Configure the deployment key
+        shell: bash
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Upload an immutable release
+        shell: bash
+        run: |
+          if [[ ! "$VPS_REGISTRY_ROOT" =~ ^/[A-Za-z0-9._/-]+$ ]]; then
+            echo "VPS_REGISTRY_ROOT must be an absolute path without spaces" >&2
+            exit 1
+          fi
+          if [[ ! "$VPS_SSH_PORT" =~ ^[0-9]+$ ]]; then
+            echo "VPS_SSH_PORT must be numeric" >&2
+            exit 1
+          fi
+
+          target="$VPS_USER@$VPS_HOST"
+          release="$VPS_REGISTRY_ROOT/releases/$GITHUB_SHA"
+          ssh -p "$VPS_SSH_PORT" "$target" "mkdir -p '$release'"
+          rsync -az --delete -e "ssh -p $VPS_SSH_PORT" dist/ "$target:$release/"
+
+      - name: Activate the release atomically
+        shell: bash
+        run: |
+          target="$VPS_USER@$VPS_HOST"
+          ssh -p "$VPS_SSH_PORT" "$target" sh -s -- "$VPS_REGISTRY_ROOT" "$GITHUB_SHA" <<'REMOTE'
+          set -eu
+          registry_root=$1
+          release=$2
+          next_link="$registry_root/.current-$release"
+          ln -sfn "$registry_root/releases/$release" "$next_link"
+          mv -Tf "$next_link" "$registry_root/current"
+          REMOTE
