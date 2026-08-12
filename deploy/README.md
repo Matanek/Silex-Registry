@@ -1,4 +1,26 @@
-# VPS deployment
+# Registry hosting
+
+## GitHub Pages production
+
+The production registry is published from `.github/workflows/pages.yml`. In the
+GitHub repository settings, select GitHub Actions as the Pages source and set
+the custom domain to `registry.silex-lang.org`.
+
+At OVH, create this DNS record:
+
+```text
+Type: CNAME
+Subdomain: registry
+Target: matanek.github.io.
+TTL: 300
+```
+
+The target deliberately excludes the repository name. Once DNS has propagated
+and GitHub has issued the certificate, enable HTTPS in the repository Pages
+settings. The public registry index is then available at
+`https://registry.silex-lang.org/v1/index.json`.
+
+## Optional future VPS deployment
 
 The deployment publishes immutable releases below
 `/srv/silex/registry/releases/<git-sha>` and atomically changes the
@@ -41,21 +63,14 @@ but skip production deployment.
 
 ## Route with Caddy
 
-The deployed release contains `registry/v1/...`. A site and registry served
-from separate release roots can be combined without coupling their deployments:
+The deployed release contains `v1/...`. The registry has its own canonical
+host and remains independent from the website deployment:
 
 ```caddyfile
-silex-lang.org {
-    handle /registry/* {
-        root * /srv/silex/registry/current
-        header Cache-Control "public, max-age=300"
-        file_server
-    }
-
-    handle {
-        root * /srv/silex/website/current
-        file_server
-    }
+registry.silex-lang.org {
+    root * /srv/silex/registry/current
+    header Cache-Control "public, max-age=300"
+    file_server
 }
 ```
 

@@ -2,7 +2,7 @@ import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
 const sourceRoot = resolve("registry/v1");
-const outputRoot = resolve(process.argv[2] ?? "dist/registry/v1");
+const outputRoot = resolve(process.argv[2] ?? "dist/v1");
 const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
 const checksumPattern = /^[0-9a-f]{64}$/;
 

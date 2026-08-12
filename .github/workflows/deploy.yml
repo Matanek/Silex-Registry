@@ -30,7 +30,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Validate and build the registry
-        run: node scripts/build-registry.mjs dist/registry/v1
+        run: node scripts/build-registry.mjs dist/v1
 
       - name: Configure the deployment key
         shell: bash

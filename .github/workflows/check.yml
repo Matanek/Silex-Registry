@@ -34,9 +34,9 @@ jobs:
           exit "$invalid"
 
       - name: Validate and build the registry
-        run: node scripts/build-registry.mjs dist/registry/v1
+        run: node scripts/build-registry.mjs dist/v1
 
       - name: Verify generated package indexes
         run: |
-          test -f dist/registry/v1/packages/STD/index.json
-          test -f dist/registry/v1/packages/GFX/index.json
+          test -f dist/v1/packages/STD/index.json
+          test -f dist/v1/packages/GFX/index.json
