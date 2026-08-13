@@ -8,8 +8,19 @@ silex release path/to/Package
 silex publish path/to/Package
 ```
 
-The first command requires the exact package tag on GitHub and an authenticated
-GitHub CLI. The second writes one manifest per released package version:
+The first command requires the exact package tag on the package remote and uses
+Git itself to publish an immutable archive and checksum. No GitHub CLI is
+required. The second maintains a registry checkout under `~/.silex/registry`,
+fast-forwards its clean `main` branch, verifies the manifest, creates or reuses
+the developer's fork, and opens the pull request through GitHub's API.
+
+The first `silex publish` prints a GitHub Device Flow URL and code. The
+developer authorizes the Silex CLI in the browser; no GitHub CLI or client
+secret is needed. Silex stores the renewable user authorization under
+`~/.silex/auth/github.json` with user-only permissions. Repeating the command
+resumes an interrupted publication or returns the existing pull request.
+
+Each release proposal adds one manifest at:
 
 ```text
 registry/v1/packages/Name/MAJOR.MINOR.PATCH.json

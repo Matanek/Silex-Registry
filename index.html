@@ -113,8 +113,8 @@
           </div>
           <p>
             <code>silex release</code> publishes the tagged archive and checksum.
-            <code>silex publish</code> verifies them and prepares the immutable
-            registry manifest for review.
+            <code>silex publish</code> verifies them and opens the immutable
+            registry proposal for review.
           </p>
         </div>
 
@@ -126,15 +126,15 @@
             </li>
             <li>
               <span>02</span>
-              <div><h3>Release the package</h3><p>Run <code>silex release path/to/Package</code>. Silex creates the archive and lowercase SHA-256 checksum, then publishes both in the GitHub Release.</p></div>
+              <div><h3>Release the package</h3><p>Run <code>silex release path/to/Package</code>. Using the package repository's existing Git credentials, Silex creates and publishes the archive and lowercase SHA-256 checksum. No additional GitHub tool is required.</p></div>
             </li>
             <li>
               <span>03</span>
-              <div><h3>Prepare the publication</h3><p>Run <code>silex publish path/to/Package</code> from a checkout containing <code>Silex-Registry</code>. Silex verifies the assigned repository, archive, and namespace extension policy before writing the version manifest.</p></div>
+              <div><h3>Publish the proposal</h3><p>Run <code>silex publish path/to/Package</code>. Silex fast-forwards its clean registry checkout, verifies the release, creates or reuses your fork, and submits the version manifest. The first run asks you to authorize the Silex CLI with a short GitHub code; no GitHub CLI is required.</p></div>
             </li>
             <li>
               <span>04</span>
-              <div><h3>Open a pull request</h3><p>Review the prepared manifest and let the registry checks validate the complete index. Existing releases remain immutable.</p></div>
+              <div><h3>Review the pull request</h3><p>Open the URL printed by Silex and let the registry checks validate the complete index. Existing releases remain immutable.</p></div>
             </li>
           </ol>
 
@@ -148,10 +148,10 @@
 
 <span class="key">$</span> silex publish Packages/Example
 
-<span class="value">silex: prepared Example@1.0.0
-for registry review in
-Silex-Registry/registry/v1/packages/
-Example/1.0.0.json</span></code></pre>
+<span class="value">silex: published Example@1.0.0
+for registry review at
+https://github.com/Matanek/
+Silex-Registry/pull/123</span></code></pre>
             <a href="https://github.com/Matanek/Silex-Registry/blob/main/CONTRIBUTING.md">Read the complete manifest contract <span aria-hidden="true">→</span></a>
           </div>
         </div>
