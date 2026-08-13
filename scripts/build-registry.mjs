@@ -67,8 +67,10 @@ function compareVersions(left, right) {
 }
 
 function repositoryFromArchive(url) {
-  const match = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/releases\/download\//.exec(url);
-  return match?.[1] ?? null;
+  const release = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/releases\/download\//.exec(url);
+  if (release !== null) return release[1];
+  const gitRelease = /^https:\/\/raw\.githubusercontent\.com\/([^/]+\/[^/]+)\/(?:[0-9a-f]{40}|[0-9a-f]{64})\//.exec(url);
+  return gitRelease?.[1] ?? null;
 }
 
 function validExtensionGrant(packageName, grant) {
@@ -133,7 +135,7 @@ for (const packageDirectory of packageDirectories) {
     }
     if (archiveUrl.protocol !== "https:") throw new Error(`${label} archive URL must use HTTPS`);
     const archiveRepository = repositoryFromArchive(manifest.archive.url);
-    if (archiveRepository === null) throw new Error(`${label} archive must belong to a GitHub release repository`);
+    if (archiveRepository === null) throw new Error(`${label} archive must belong to its GitHub repository`);
     if (canonicalRepository !== null && canonicalRepository !== archiveRepository) {
       throw new Error(`${label} changes the repository assigned to package ${packageDirectory.name}`);
     }
