@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "name": "STD",
+  "version": "0.16.6",
+  "requires": {
+    "silex": ">=0.38.20"
+  },
+  "repository": "Matanek/Silex-Lib-STD",
+  "extensions": [],
+  "archive": {
+    "url": "https://github.com/Matanek/Silex-Lib-STD/releases/download/v0.16.6/STD-0.16.6.tar.gz",
+    "sha256": "65dec7652f06d3622713d159704f84ba57c690a0588579633a4c8a2cd165408b"
+  }
+}

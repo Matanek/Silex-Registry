@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "name": "YAML",
+  "version": "0.2.0",
+  "requires": {
+    "silex": ">=0.38.20"
+  },
+  "repository": "Matanek/Silex-Lib-YAML",
+  "extensions": [],
+  "archive": {
+    "url": "https://raw.githubusercontent.com/Matanek/Silex-Lib-YAML/9570651edaf7736ae470e4919a370bee13a87b3e/YAML-0.2.0.tar.gz",
+    "sha256": "a6c2c258c37d408480855b0c71ffca07f284e97ae88691d6ea5ebc9da61940ad"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "name": "Plot",
+  "version": "0.1.0",
+  "requires": {
+    "silex": ">=0.38.25"
+  },
+  "repository": "Matanek/Silex-Lib-Plot",
+  "extensions": [],
+  "archive": {
+    "url": "https://raw.githubusercontent.com/Matanek/Silex-Lib-Plot/b9de0a1e5ba5636e4cf2edd1f32221f7b32a02b3/Plot-0.1.0.tar.gz",
+    "sha256": "2c94d1badbdcc6577d9afbc19620aa1b3798b9791dafb00b9e3264f4f0ecf829"
+  }
+}
