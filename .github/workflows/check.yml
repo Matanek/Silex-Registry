@@ -18,7 +18,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Protect published manifests
+      - name: Protect registered package identities
         if: github.event_name == 'pull_request'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -26,8 +26,8 @@ jobs:
         run: |
           invalid=0
           while IFS=$'\t' read -r status path remainder; do
-            if [[ "$path" == registry/v1/packages/*/*.json && "$status" != A* ]]; then
-              echo "Published manifest must remain immutable: $status $path${remainder:+ -> $remainder}" >&2
+            if [[ "$path" =~ ^registry/v1/packages/[^/]+\.json$ && "$status" != A* ]]; then
+              echo "Registered package identities must remain immutable: $status $path${remainder:+ -> $remainder}" >&2
               invalid=1
             fi
           done < <(git diff --name-status "$BASE_SHA" HEAD -- registry/v1/packages)
@@ -36,9 +36,9 @@ jobs:
       - name: Validate and build the registry
         run: node scripts/build-registry.mjs dist/v1
 
-      - name: Verify generated package indexes
+      - name: Verify generated registry index
         run: |
           test -f dist/index.html
           test -f dist/styles.css
-          test -f dist/v1/packages/STD/index.json
-          test -f dist/v1/packages/GFX/index.json
+          test -f dist/v1/index.json
+          node -e "const index = require('./dist/v1/index.json'); if (index.schema !== 2) process.exit(1)"

@@ -1,57 +1,43 @@
 # Silex package registry
 
-This repository is the public source of truth for the Silex package registry.
-Package releases are proposed through pull requests and published as static,
-versioned JSON files at:
+This repository assigns public Silex package names to their canonical Git
+repositories. It does not publish package versions or copy their manifests.
+Tagged commits in each registered repository are the source of truth for
+versions, compatibility, dependencies, extension grants, and contents.
+
+The generated index is published at:
 
 `https://registry.silex-lang.org/v1/index.json`
-
-Package archives remain owned by their respective repositories. The registry
-contains only their immutable release URLs, compatibility ranges, and SHA-256
-checksums.
 
 ## Layout
 
 ```text
-registry/v1/
-  index.json
-  packages/
-    STD/
-      0.16.2.json
+registry/v1/packages/
+  GFX.json
+  STD.json
 ```
 
-Each committed package file describes exactly one immutable release. The
-per-package `index.json` files are generated during validation and deployment;
-they must not be committed.
+Each immutable registration has this shape:
 
-## Publish a release
+```json
+{
+  "schema": 1,
+  "name": "GFX",
+  "repository": "https://github.com/Matanek/Silex-Lib-GFX.git"
+}
+```
 
-1. Commit the package, create its exact `vMAJOR.MINOR.PATCH` tag, and push both.
-2. Run `silex release path/to/Package` to publish the archive and checksum.
-3. Run `silex publish path/to/Package`; Silex synchronizes its registry checkout
-   under `~/.silex/registry/`, verifies the release, creates or reuses your
-   fork, and opens the pull request.
-4. Review the URL printed by Silex and let the registry check validate the
-   generated indexes.
-5. Merge only after the assigned GitHub repository, namespace extension policy,
-   archive URL, and checksum have been reviewed.
+Run `silex register path/to/Package` once to register a new package name. Once
+registered, the package owner publishes versions directly with Git tags. Each
+`vMAJOR.MINOR.PATCH` tag must contain a `Package.json` declaring that exact
+version. `silex check path/to/Package` is an optional, read-only validation.
 
-The registry locks one package name to one GitHub repository. New release
-manifests copy the package's `extensions` policy and the installer verifies it
-against the checksummed archive before recording a local registry proof.
+Build and validate the deployable schema-2 index with:
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete manifest contract and
-local validation command.
+```sh
+node scripts/build-registry.mjs dist/v1
+```
 
-The registry tooling and documentation use the same Apache-2.0 with LLVM
-exception license as Silex. Package archives retain the license declared by
-their own repositories.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the registration contract.
 
-## Deployment
-
-The registry is built as static files under `dist/` and published through
-GitHub Pages on every merge to `main`. The repository Pages source must be set
-to GitHub Actions and its custom domain to `registry.silex-lang.org`.
-
-DNS configuration and the optional future VPS deployment are documented in
-[deploy/README.md](deploy/README.md).
+The registry tooling uses the Apache-2.0 with LLVM exception license.

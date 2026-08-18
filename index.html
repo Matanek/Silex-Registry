@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta
       name="description"
-      content="Contribute to Silex and publish versioned packages through the public Silex registry."
+      content="Discover public Silex package repositories through the Silex registry."
     >
     <meta name="theme-color" content="#0c0c0d">
     <title>Silex Registry — Build. Release. Share.</title>
@@ -55,7 +55,7 @@
             </div>
             <div>
               <dt>Contract</dt>
-              <dd>Versioned &amp; immutable</dd>
+              <dd>Name → Git repository</dd>
             </div>
             <div>
               <dt>Official packages</dt>
@@ -99,7 +99,7 @@
           <article class="contribution-card">
             <span class="card-number">03</span>
             <h3>Community packages</h3>
-            <p>Package one useful capability, release it immutably, and propose its manifest to the public registry.</p>
+            <p>Package one useful capability, register its repository once, then publish releases directly with Git tags.</p>
             <a href="#publish">Read the release path <span aria-hidden="true">→</span></a>
           </article>
         </div>
@@ -109,12 +109,11 @@
         <div class="section-heading publish-heading">
           <div>
             <p class="eyebrow">Package publication</p>
-            <h2 id="publish-title">One release.<br>Two commands.</h2>
+            <h2 id="publish-title">Register once.<br>Tag every release.</h2>
           </div>
           <p>
-            <code>silex release</code> publishes the tagged archive and checksum.
-            <code>silex publish</code> verifies them and opens the immutable
-            registry proposal for review.
+            <code>silex register</code> opens the package's single registry proposal.
+            Package owners publish every version directly with Git tags.
           </p>
         </div>
 
@@ -122,19 +121,19 @@
           <ol class="release-steps">
             <li>
               <span>01</span>
-              <div><h3>Tag the package</h3><p>Set the semantic version and Silex compatibility range, then publish the complete package from that exact commit.</p></div>
+              <div><h3>Prepare the package</h3><p>Set the semantic version and Silex compatibility range, then commit the complete package contents.</p></div>
             </li>
             <li>
               <span>02</span>
-              <div><h3>Release the package</h3><p>Run <code>silex release path/to/Package</code>. Using the package repository's existing Git credentials, Silex creates and publishes the archive and lowercase SHA-256 checksum. No additional GitHub tool is required.</p></div>
+              <div><h3>Check optionally</h3><p>Run <code>silex check path/to/Package</code> for a read-only validation of the package contract and expected version tag.</p></div>
             </li>
             <li>
               <span>03</span>
-              <div><h3>Publish the proposal</h3><p>Run <code>silex publish path/to/Package</code>. Silex fast-forwards its clean registry checkout, verifies the release, creates or reuses your fork, and submits the version manifest. The first run asks you to authorize the Silex CLI with a short GitHub code; no GitHub CLI is required.</p></div>
+              <div><h3>Register once</h3><p>Run <code>silex register path/to/Package</code> once. Silex creates or reuses your fork and submits the package name with its canonical repository. No release metadata is copied into the registry.</p></div>
             </li>
             <li>
               <span>04</span>
-              <div><h3>Review the pull request</h3><p>Open the URL printed by Silex and let the registry checks validate the complete index. Existing releases remain immutable.</p></div>
+              <div><h3>Tag every version</h3><p>Create and push the matching <code>vMAJOR.MINOR.PATCH</code> tag with Git. Silex discovers it without another registry pull request.</p></div>
             </li>
           </ol>
 
@@ -143,16 +142,20 @@
               <span class="file-mark" aria-hidden="true">$</span>
               <strong>Publish Example 1.0.0</strong>
             </div>
-            <pre><code><span class="key">$</span> silex release Packages/Example
-<span class="value">silex: released Example@1.0.0</span>
+            <pre><code><span class="key">$</span> silex check Packages/Example
+<span class="value">silex: package Example@1.0.0 is valid;
+its release tag is v1.0.0</span>
 
-<span class="key">$</span> silex publish Packages/Example
+<span class="key">$</span> silex register Packages/Example
 
-<span class="value">silex: published Example@1.0.0
+<span class="value">silex: submitted registration of Example
 for registry review at
 https://github.com/Matanek/
-Silex-Registry/pull/123</span></code></pre>
-            <a href="https://github.com/Matanek/Silex-Registry/blob/main/CONTRIBUTING.md">Read the complete manifest contract <span aria-hidden="true">→</span></a>
+Silex-Registry/pull/123</span>
+
+<span class="key">$</span> git tag v1.0.0
+<span class="key">$</span> git push origin v1.0.0</code></pre>
+            <a href="https://github.com/Matanek/Silex-Registry/blob/main/CONTRIBUTING.md">Read the registration contract <span aria-hidden="true">→</span></a>
           </div>
         </div>
       </section>

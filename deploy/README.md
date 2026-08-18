@@ -74,9 +74,9 @@ registry.silex-lang.org {
 }
 ```
 
-The five-minute cache is conservative for generated indexes. Once manifest
-URLs are published they are immutable and may receive a longer cache policy in
-a dedicated matcher.
+The five-minute cache is conservative for the generated repository index.
+Package releases are discovered from their registered Git repositories and do
+not require a registry deployment.
 
 ## Roll back
 

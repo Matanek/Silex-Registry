@@ -1,7 +1,0 @@
-{
-  "schema": 1,
-  "endpoints": {
-    "releases": "packages/{package}/index.json",
-    "manifest": "packages/{package}/{version}.json"
-  }
-}
