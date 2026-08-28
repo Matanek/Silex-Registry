@@ -1,86 +1,83 @@
 # Registry hosting
 
-## GitHub Pages production
+## Current GitHub Pages service
 
-The production registry is published from `.github/workflows/pages.yml`. In the
-GitHub repository settings, select GitHub Actions as the Pages source and set
-the custom domain to `registry.silex-lang.org`.
+GitHub Pages remains active until the VPS cutover is complete. Its workflow is
+`.github/workflows/pages.yml` and its current custom domain is
+`registry.silex-lang.org`. Do not disable Pages before the production DNS and
+HTTPS checks below are green.
 
-At OVH, create this DNS record:
+## VPS releases
 
-```text
-Type: CNAME
-Subdomain: registry
-Target: matanek.github.io.
-TTL: 300
-```
-
-The target deliberately excludes the repository name. Once DNS has propagated
-and GitHub has issued the certificate, enable HTTPS in the repository Pages
-settings. The public registry index is then available at
-`https://registry.silex-lang.org/v1/index.json`.
-
-## Optional future VPS deployment
-
-The deployment publishes immutable releases below
-`/srv/silex/registry/releases/<git-sha>` and atomically changes the
-`/srv/silex/registry/current` symlink. The web server always reads `current`, so
-a visitor cannot observe a partially uploaded registry.
-
-## Prepare the VPS
-
-Create a dedicated deployment account and a directory it can write. The exact
-account-management commands depend on the VPS distribution; the resulting
-layout must be:
+The VPS workflow publishes immutable releases and atomically changes the
+`current` symlink, so a visitor cannot observe a partially uploaded registry:
 
 ```text
 /srv/silex/registry/
   current -> /srv/silex/registry/releases/<git-sha>
   releases/
+    <git-sha>/
+      index.html
+      styles.css
+      v1/index.json
 ```
 
-Install the public half of a dedicated Ed25519 deployment key in that account's
-`authorized_keys`. The account needs write access only to the registry root; it
-does not need root or interactive application privileges.
+The dedicated account `silex-registry-deploy` owns only this registry root. It
+has no `sudo` access and its SSH key disables forwarding and interactive PTY
+allocation.
 
-## Configure the GitHub production environment
+## GitHub production environment
 
-Add these environment secrets:
+The `production` environment provides these secrets:
 
-- `VPS_HOST`: VPS hostname or IP address;
-- `VPS_USER`: dedicated deployment account;
-- `VPS_SSH_KEY`: private Ed25519 deployment key;
-- `VPS_KNOWN_HOSTS`: pinned `known_hosts` line for the VPS.
+- `VPS_HOST`;
+- `VPS_USER`;
+- `VPS_SSH_KEY`;
+- `VPS_KNOWN_HOSTS`.
 
-Optional repository or environment variables:
+It also provides `VPS_SSH_PORT`, `VPS_REGISTRY_ROOT`, and
+`REGISTRY_SMOKE_URL`. The repository variable `VPS_DEPLOY_ENABLED=true`
+enables `.github/workflows/deploy.yml`. Each deployment validates its inputs,
+uploads one complete immutable release, switches `current`, and checks the
+public staging endpoint.
 
-- `VPS_SSH_PORT`, default `22`;
-- `VPS_REGISTRY_ROOT`, default `/srv/silex/registry`.
+## Apache
 
-When the server route has been tested, set the repository variable
-`VPS_DEPLOY_ENABLED` to `true`. Until then, merges still validate the registry
-but skip production deployment.
+The expected staging and production configurations live under
+`deploy/apache/`:
 
-## Route with Caddy
+- `silex-registry.nekmata.com.conf` and its SSL companion serve the staging
+  endpoint from `/srv/silex/registry/current`;
+- `registry.silex-lang.org.conf` is the HTTP bootstrap VirtualHost for the
+  production domain.
 
-The deployed release contains `v1/...`. The registry has its own canonical
-host and remains independent from the website deployment:
+The production VirtualHost deliberately remains on HTTP while DNS still
+points to GitHub Pages. It can be tested directly on the VPS with a forced
+`Host` header.
 
-```caddyfile
-registry.silex-lang.org {
-    root * /srv/silex/registry/current
-    header Cache-Control "public, max-age=300"
-    file_server
-}
+## DNS and HTTPS cutover
+
+At OVH, delete the current `registry` CNAME to `matanek.github.io.` and create:
+
+```text
+Type: A
+Subdomain: registry
+Target: 92.222.25.45
+TTL: 300
 ```
 
-The five-minute cache is conservative for the generated repository index.
-Package releases are discovered from their registered Git repositories and do
-not require a registry deployment.
+Once public DNS resolves to the VPS, issue the certificate and enable the
+redirect:
 
-## Roll back
+```sh
+sudo certbot --apache -d registry.silex-lang.org --redirect
+```
 
-Point `current` at an earlier directory under `releases/` using a temporary
-symlink and an atomic rename. Releases are intentionally not deleted by the
-workflow, so rollback remains possible. Retention can be added later as a
-separate, explicit maintenance policy.
+Then verify both `/` and `/v1/index.json` over HTTPS. Only after those checks
+pass should GitHub Pages be disabled for this repository.
+
+## Rollback
+
+Point `current` at an earlier complete directory under `releases/` using a
+temporary symlink and an atomic rename. Releases are intentionally retained by
+the workflow; adding a retention policy is a separate maintenance operation.

@@ -38,6 +38,10 @@ Build and validate the deployable schema-2 index with:
 node scripts/build-registry.mjs dist/v1
 ```
 
+Validated `main` commits can also deploy that static output as an immutable VPS
+release. See [deploy/README.md](deploy/README.md) for the server layout, GitHub
+settings, and production-domain activation.
+
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the registration contract.
 
 The registry tooling uses the Apache-2.0 with LLVM exception license.
