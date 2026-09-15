@@ -2,7 +2,7 @@
 
 This is a local `/v2` storage prototype, not a deployed replacement for `/v1`.
 The existing static build and deployment are unchanged. No HTTP endpoint creates
-an identity or accepts a claimed GitHub identity. GitHub authorization, the Silex
+an identity or accepts a claimed GitHub identity. Integrated GitHub login, the Silex
 client, complete manifest semantics, namespace delegation, hostile-code execution
 isolation, operational hardening and migration are separate, unfinished work.
 Do not deploy this subtree as a public service yet.
@@ -45,7 +45,7 @@ Initialization is offline, never implicit in a request.
 Rights refer to the verified, stable numeric GitHub ID, stored as text, not the
 mutable login label. Registry credentials are random 256-bit bearer tokens; only
 their SHA-256, identity, expiry and revocation state are stored. They are distinct
-from GitHub tokens. The authentication adapter is not implemented here. A
+from GitHub tokens. The device-flow adapter below does not yet issue sessions. A
 validly authenticated identity may publish a free name without invitation.
 Historical names remain reserved; dotted names require ownership of every parent.
 Cross-owner extension grants currently fail closed.
@@ -142,3 +142,42 @@ connections, request timeouts/body limits and a least-privileged service identit
 Credential changes must join the same mutation-lock discipline. Live GitHub OAuth,
 production extensions/configuration, permissions, backups/restores and actual
 power-loss behavior require their own qualification before activation.
+
+## Qualify GitHub identification separately
+
+`src/GitHub.php` implements a bounded server-side device-flow exchange, but is
+not connected to public routes or registry credentials. The registry must own
+the device code and bind it privately to the initiating client's attempt before
+this adapter can be used for login. Never accept a client-supplied device code,
+GitHub token, login or numeric identity as that binding.
+
+Its offline test uses an injected transport, never a permissive HTTP mode:
+
+```sh
+php Silex-Registry/server/tests/github.php
+```
+
+For explicit interactive qualification, create a separate OAuth App, enable
+Device Flow and retain expiring user tokens. Do not reuse the legacy registration
+application, which requests `public_repo`. No client secret is needed by the
+device flow. With the dedicated public client ID, run:
+
+```sh
+php Silex-Registry/server/tests/github-live.php PUBLIC_CLIENT_ID
+```
+
+The person authorizes the displayed code on GitHub themselves. This probe calls
+only the fixed GitHub device, token and authenticated-user endpoints. It requests
+an empty scope, rejects any nonempty granted scope and returns only the stable ID
+and login. HTTPS certificate checks, no redirects, 10-second request deadlines
+and 32 KiB response limits apply. All GitHub tokens, refresh tokens and unused
+profile fields remain transient in the process; nothing is written to disk.
+Discarding a token does not revoke it at GitHub. The test creates no registry
+credential and does not prove `silex login` or the client/attempt binding.
+
+The API exchange follows [GitHub's device-flow documentation](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#device-flow).
+An [empty scope](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps)
+does not request additional repository or private-profile permissions, but public
+data remain accessible. [The authenticated-user endpoint](https://docs.github.com/en/rest/users/users#get-the-authenticated-user)
+still identifies the token owner without requesting private profile access.
+The complete response contains more public fields than the two retained here.
