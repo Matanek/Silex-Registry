@@ -45,3 +45,9 @@ settings, and production-domain activation.
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the registration contract.
 
 The registry tooling uses the Apache-2.0 with LLVM exception license.
+
+## Experimental durable storage
+
+An isolated, non-deployed `/v2` prototype and its independent HTTP/crash tests
+live in [server/](server/README.md). This does not change the current `/v1`
+registration, version or deployment contract.
