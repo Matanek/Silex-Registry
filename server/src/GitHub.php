@@ -39,9 +39,13 @@ final class GitHub
             'grant_type' => 'urn:ietf:params:oauth:grant-type:device_code',
         ]);
         if (isset($result->error)) {
+            if ($result->error === 'slow_down') {
+                if (!isset($result->interval)) return ['state' => 'slow_down'];
+                demand(is_int($result->interval) && $result->interval > 0 && $result->interval <= 900, 'invalid_github_response', 503);
+                return ['state' => 'slow_down', 'interval' => $result->interval];
+            }
             return match ($result->error) {
                 'authorization_pending' => ['state' => 'pending'],
-                'slow_down' => ['state' => 'slow_down'],
                 'access_denied' => ['state' => 'denied'],
                 'expired_token', 'token_expired', 'incorrect_device_code' => ['state' => 'expired'],
                 default => throw new Rejection(503, 'github_authorization_unavailable'),

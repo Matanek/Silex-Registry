@@ -1,8 +1,9 @@
 # Experimental durable registry
 
 This is a local `/v2` storage prototype, not a deployed replacement for `/v1`.
-The existing static build and deployment are unchanged. No HTTP endpoint creates
-an identity or accepts a claimed GitHub identity. Integrated GitHub login, the Silex
+The existing static build and deployment are unchanged. HTTP login creates an
+identity only after the server's GitHub exchange; it never accepts a claimed
+identity from the client. Live GitHub qualification, the Silex
 client, complete manifest semantics, namespace delegation, hostile-code execution
 isolation, operational hardening and migration are separate, unfinished work.
 Do not deploy this subtree as a public service yet.
@@ -45,7 +46,7 @@ Initialization is offline, never implicit in a request.
 Rights refer to the verified, stable numeric GitHub ID, stored as text, not the
 mutable login label. Registry credentials are random 256-bit bearer tokens; only
 their SHA-256, identity, expiry and revocation state are stored. They are distinct
-from GitHub tokens. The device-flow adapter below does not yet issue sessions. A
+from GitHub tokens. The login service below issues 24-hour registry access. A
 validly authenticated identity may publish a free name without invitation.
 Historical names remain reserved; dotted names require ownership of every parent.
 Cross-owner extension grants currently fail closed.
@@ -98,7 +99,7 @@ Anonymous `GET`/`HEAD` calls:
   digest ETag, `application/octet-stream` and attachment disposition.
 
 There is no arbitrary object download, author-supplied URL fetch, extraction,
-compiler invocation, admin route or OAuth simulation endpoint. State is
+compiler invocation, admin route or OAuth simulation endpoint. Publication state is
 `receiving` or `published`; an expired attempt returns 410. Errors contain a
 stable `error`, generic `message` and `retryable`, never submitted credentials.
 
@@ -145,11 +146,10 @@ power-loss behavior require their own qualification before activation.
 
 ## Qualify GitHub identification separately
 
-`src/GitHub.php` implements a bounded server-side device-flow exchange, but is
-not connected to public routes or registry credentials. The registry must own
-the device code and bind it privately to the initiating client's attempt before
-this adapter can be used for login. Never accept a client-supplied device code,
-GitHub token, login or numeric identity as that binding.
+`src/GitHub.php` implements a bounded server-side device-flow exchange.
+`src/Login.php` binds it to a private, single-consumption attempt. Neither accepts
+a client-supplied GitHub token or identity. Live qualification is still required
+before activation outside this experimental lane.
 
 Its offline test uses an injected transport, never a permissive HTTP mode:
 
@@ -181,3 +181,65 @@ does not request additional repository or private-profile permissions, but publi
 data remain accessible. [The authenticated-user endpoint](https://docs.github.com/en/rest/users/users#get-the-authenticated-user)
 still identifies the token owner without requesting private profile access.
 The complete response contains more public fields than the two retained here.
+
+## Login attempts and registry access
+
+Initialize login state offline with `storage.php login-init /absolute/data-root`.
+This adds separate login tables and a private `login.key` without migrating or
+changing existing publication data. Set `SILEX_GITHUB_CLIENT_ID` for the service
+to the dedicated app's public ID. No configured app means login fails closed;
+anonymous reads and existing registry access remain independent of GitHub.
+
+The client generates a fresh cryptographically random 256-bit ticket in memory.
+It uses `Authorization: Login <64-lowercase-hex-ticket>` with these empty-body
+requests, never a ticket in an URL:
+
+- `POST /v2/logins`: begin or recover that ticket's attempt. Return its `id`,
+  public `user_code`, fixed GitHub verification URL, expiry and polling interval.
+- `POST /v2/logins/<id>`: poll only that attempt with its matching ticket. Honor
+  `retry_after` before repeating the request.
+
+The server stores only the ticket digest and an authenticated-encrypted device
+code, bound inside its ciphertext to the attempt ID. Sodium secretbox uses a
+fresh random nonce and the private offline key. GitHub access/refresh tokens
+remain transient. The key must stay outside database-only exports; encryption
+does not protect a host compromised together with that key.
+
+States are `starting`, `pending`, `polling`, `denied`, `expired`, `failed` and
+`consumed`. Exactly one successful poll returns `state: authorized`, the attempt
+`id`, a registry `token`, `expires_at`, `github_id` and `login`. Creating/updating
+the identity, hashing the new credential and consuming the attempt commit together
+under the same lock as publication and revocation. Later polls return `consumed`,
+never another bearer. A lost success response or failed local credential write
+requires a new login; any orphan access expires within 24 hours.
+
+Outbound calls happen outside the global storage lock. A 30-second exclusive
+attempt lease prevents duplicate concurrent exchange; a crashed/late exchange
+fails closed instead of being reassigned. Attempts expire within 15 minutes.
+The prototype limits creation to 10 attempts per server-minute and 32 concurrent
+attempts. These global bounds prevent unbounded work, not denial of service or
+fairness between clients; production still needs front-end controls.
+
+With `Authorization: Bearer <registry-token>`, `GET /v2/session` checks the current
+identity and expiry; `DELETE /v2/session` idempotently revokes only that credential.
+No cookie or website session is created. GitHub application revocation prevents
+future authorization but does not instantly revoke already-issued registry access.
+Local logout must revoke at the registry before removing the local credential;
+if the network fails, retain it so revocation can be retried.
+
+Run `storage.php login-collect /absolute/data-root` regularly to erase expired
+credentials and attempts older than 24 hours and clear expired encrypted codes.
+Identity/ownership records remain; collection never removes published versions.
+Old database backups may retain encrypted attempts; their key and retention need
+separate operational handling before deployment.
+
+Run the isolated state-machine and HTTP tests from the Spec Worktree group:
+
+```sh
+node Silex-Registry/server/tests/run-login.mjs /absolute/path/to/php
+```
+
+The alternate mock bootstrap lives only in `tests/login-router.php`, outside
+`public/`; the production entry point always constructs the real GitHub adapter.
+These tests cover attempt crossing, replay, expiry, slowdown, revocation, crash
+boundaries and automatic minimal identity creation, not real GitHub consent.

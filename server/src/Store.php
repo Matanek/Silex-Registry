@@ -59,6 +59,29 @@ final class Store
         $s = $this->db->prepare($sql); $s->execute($args); return $s;
     }
 
+    /** Internal authentication extension; shares the publication/GC writer lock. */
+    public function transaction(\Closure $action): mixed
+    {
+        return $this->mutate(fn() => $action($this->db));
+    }
+
+    public function access(string $token): array
+    {
+        $identity = $this->identity($token);
+        $row = $this->query('SELECT i.login,c.expires_at FROM credentials c JOIN identities i ON i.github_id=c.github_id WHERE c.digest=?', [hash('sha256', $token)])->fetch();
+        return ['github_id' => $identity, 'login' => $row['login'], 'expires_at' => $row['expires_at']];
+    }
+
+    public function revoke(string $token): array
+    {
+        demand(preg_match('/^[a-f0-9]{64}$/D', $token) === 1, 'unauthorized', 401);
+        return $this->mutate(function () use ($token) {
+            // Idempotent even after expiry/revocation; the bearer can revoke only itself.
+            $this->query('UPDATE credentials SET revoked=1 WHERE digest=?', [hash('sha256', $token)]);
+            return ['revoked' => true];
+        });
+    }
+
     // All cooperating writers, including GC and credential changes, take this
     // lock. Bounded chunks are read by HTTP before acquiring it.
     private function mutate(\Closure $action): mixed
