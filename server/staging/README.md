@@ -40,8 +40,30 @@ Le profil sans réseau laisse la connexion GitHub désactivée. Le banc injecte
 des identités synthétiques via l'administrateur SSH et révoque ses jetons dans
 un bloc de nettoyage. Aucune route HTTP ne permet cette injection. Les limites
 réduites de `limits.json` servent aux cas adverses et ne sont pas des quotas de
-production. Les sauvegardes hors VPS et la qualification OAuth sur cet hôte
-restent à traiter avant une ouverture publique.
+production. La qualification OAuth sur cet hôte reste à traiter avant une
+ouverture publique.
+
+## Sauvegarder le magasin actif
+
+`silex-registry-stage-snapshot` crée un instantané du magasin réellement servi
+dans `data/`, sous `backups/`, en prenant le verrou de mutation du registre. Il
+ne modifie pas le registre public et n'écrase jamais un instantané existant.
+Choisir un nom UTC unique de forme `stage-YYYYMMDDTHHMMSSZ` :
+
+```sh
+sudo /usr/local/libexec/silex-registry-stage-snapshot create stage-20260916T120000Z
+sudo /usr/local/libexec/silex-registry-stage-snapshot verify stage-20260916T120000Z EMPREINTE_SHA256
+```
+
+Conserver l'empreinte retournée hors VPS, puis copier cet instantané vers la
+destination indépendante avec `server/migration/copy-snapshot.mjs` et y relancer
+la vérification et une restauration dans un répertoire vide. Le processus
+administratif reste sans réseau ; seule la copie initiée depuis le poste utilise
+SSH. Le snapshot peut bloquer temporairement les écritures du service : choisir
+une fenêtre adaptée et vérifier l'espace libre avant de le lancer. Les copies
+restent privées et ne sont pas purgées automatiquement. Ni fréquence ni alerte
+ne sont configurées par ce script ; une sauvegarde ponctuelle ne constitue pas
+une politique d'exploitation.
 
 ## Qualification
 

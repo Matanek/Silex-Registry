@@ -16,8 +16,9 @@ for account in silex-registry-stage silex-registry-stage-web; do
     useradd --system --user-group --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin "$account"
   fi
 done
-install -d -m 0755 "$base/releases" "$root/etc/stage" "$root/app" "$root/data" "$root/run/stage" "$root/run/web" "$root/tmp"
+install -d -m 0755 "$base/releases" "$root/etc/stage" "$root/app" "$root/data" "$root/snapshots" "$root/run/stage" "$root/run/web" "$root/tmp"
 install -d -m 0700 -o silex-registry-stage -g silex-registry-stage "$base/data"
+install -d -m 0700 -o silex-registry-stage -g silex-registry-stage "$base/backups"
 install -d -m 0750 -o root -g silex-registry-stage-web "$base/gateway"
 release="$base/releases/$revision"
 archive_digest=$(sha256sum "$archive")
@@ -65,6 +66,7 @@ for name in silex-registry-stage.service silex-registry-stage-web.service; do
 done
 install -d -m 0755 /usr/local/libexec
 install -m 0700 "$config/fixture.sh" /usr/local/libexec/silex-registry-stage-fixture
+install -m 0700 "$config/snapshot-stage.sh" /usr/local/libexec/silex-registry-stage-snapshot
 systemd-analyze verify /etc/systemd/system/silex-registry-stage.service /etc/systemd/system/silex-registry-stage-web.service
 systemctl daemon-reload
 systemctl reset-failed silex-registry-stage.service silex-registry-stage-web.service
