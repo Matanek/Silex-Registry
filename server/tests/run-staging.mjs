@@ -14,6 +14,7 @@ const nonce = randomBytes(6).toString('hex');
 const token = randomBytes(32).toString('hex'), other = randomBytes(32).toString('hex');
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const name = `Stage_${nonce}`;
+const unfinished = new Set();
 let checks = 0;
 function pass(label) { console.log(`ok ${++checks} - ${label}`); }
 function remote(command, input = '') {
@@ -83,10 +84,12 @@ try {
   const p = publication(name);
   await request('/v2/publications', { method: 'POST', body: p.descriptor, status: 401 });
   const session = (await request('/v2/publications', { method: 'POST', credential: token, body: p.descriptor })).value;
+  unfinished.add(session.id);
   await request(`/v2/publications/${session.id}`, { credential: other, status: 403 });
   await request(`/v2/packages/${name}`, { status: 404 });
   await upload(p, session);
   await request(`/v2/publications/${session.id}/finalize`, { method: 'POST', credential: token });
+  unfinished.delete(session.id);
   const served = await request(`/v2/packages/${name}/versions/1.0.0/source`);
   assert.deepEqual(served.bytes, p.source);
   assert.equal(served.headers['content-type'], 'application/octet-stream');
@@ -99,6 +102,7 @@ try {
   ]) {
     const bad = publication(name + suffix, transform);
     const pending = (await request('/v2/publications', { method: 'POST', credential: token, body: bad.descriptor })).value;
+    unfinished.add(pending.id);
     await upload(bad, pending);
     await request(`/v2/publications/${pending.id}/finalize`, { method: 'POST', credential: token, status });
     await request(`/v2/packages/${name + suffix}`, { status: 404 });
@@ -125,6 +129,7 @@ try {
   pass('forced FPM termination cleans its runtime and recovers the immutable publication');
   console.log(`PASS ${checks} staging groups; retained package ${name}; provider identity injected by private administrator`);
 } finally {
+  for (const id of unfinished) await fixture('expire', { id });
   await fixture('revoke', { token });
   await fixture('revoke', { token: other });
 }
