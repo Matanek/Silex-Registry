@@ -20,7 +20,7 @@ final class Store
 
     public function __construct(public readonly string $root, array $limits = [], private readonly ?\Closure $probe = null)
     {
-        demand(realpath($root) === $root && is_file($root . '/registry.sqlite'), 'uninitialized_store', 503);
+        demand(realpath($root) === $root && is_file($root . '/registry.sqlite') && is_file($root . '/mutation.lock') && !is_link($root . '/mutation.lock'), 'uninitialized_store', 503);
         $codeRoot = dirname(__DIR__, 2);
         demand(!str_starts_with($root . '/', $codeRoot . '/'), 'data_inside_code', 503);
         demand(array_diff_key($limits, self::LIMITS) === [], 'unknown_limit', 503);
