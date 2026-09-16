@@ -12,9 +12,9 @@ require_once __DIR__ . '/Login.php';
 function registryServe(Closure $factory): void
 {
 ini_set('display_errors', '0');
-set_error_handler(static function (int $severity, string $message): bool {
+set_error_handler(static function (int $severity, string $message, string $file, int $line): bool {
     if (!(error_reporting() & $severity)) return false;
-    throw new ErrorException('registry_io_error', 0, $severity);
+    throw new ErrorException('registry_io_error', 0, $severity, $file, $line);
 });
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
