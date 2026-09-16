@@ -22,6 +22,18 @@ From the Spec's `Worktree/` group, run:
 node Silex-Registry/server/tests/run.mjs /absolute/path/to/php
 ```
 
+Le parcours candidat de publication sans Git s'exécute depuis le même groupe,
+après construction du CLI de la Spec :
+
+```sh
+node Silex-Registry/server/tests/run-publish.mjs /absolute/path/to/php /absolute/path/to/silex /absolute/path/to/package
+```
+
+Il crée un accès de registre uniquement sous `TestState`, publie via le vrai
+CLI, relit la version et la source publiques, puis relance la commande pour
+vérifier sa reprise idempotente. Il n'utilise ni OAuth GitHub réel ni magasin
+utilisateur.
+
 The launcher prints the repository, baseline SHA, PHP executable/version, limits,
 data root and HTTP addresses. It creates a new empty store under
 `Worktree/TestState/server/` and starts two independent PHP processes on loopback.
