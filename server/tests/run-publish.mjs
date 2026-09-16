@@ -89,6 +89,10 @@ try {
   await chmod(resolve(root, 'auth/registry.json'), 0o600);
   await mkdir(home, { mode: 0o700 });
 
+  const preview = await runCandidate('http://127.0.0.1:1', ['publish', packagePath, '--dry-run']);
+  assert.match(preview, /exclude Boundary\/linux-x64\/libLocalRuntime\.a \(declared artifact sent as a separate object\)/);
+  assert.match(preview, /artifact linux-x64\/LocalRuntime -> Boundary\/linux-x64\/libLocalRuntime\.a/);
+
   const counter = resolve(root, 'publish-crash-counter');
   const crashing = await start(`${repository}/server/tests/publish-router.php`, { SILEX_PUBLISH_CRASH_COUNTER: counter });
   server = crashing.child;
@@ -113,6 +117,13 @@ try {
   assert.equal(sourceResponse.status, 200);
   const source = Buffer.from(await sourceResponse.arrayBuffer());
   assert.equal(sha(source), version.descriptor.source.sha256);
+  assert.deepEqual(version.descriptor.artifacts.map(({ target, name, path }) => ({ target, name, path })), [{
+    target: 'linux-x64', name: 'LocalRuntime', path: 'Boundary/linux-x64/libLocalRuntime.a',
+  }]);
+  const expectedArtifact = await readFile(resolve(packagePath, 'Boundary/linux-x64/libLocalRuntime.a'));
+  const artifactResponse = await fetch(`${base}/v2/packages/LocalDemo/versions/1.0.0/artifacts/linux-x64/LocalRuntime`);
+  assert.equal(artifactResponse.status, 200);
+  assert.deepEqual(Buffer.from(await artifactResponse.arrayBuffer()), expectedArtifact);
 
   const second = await runCandidate(base, ['publish', packagePath]);
   assert.match(second, /silex: already published LocalDemo@1\.0\.0/);
