@@ -12,6 +12,7 @@ Depuis la racine du dépôt, avec Node.js, Git et curl disponibles :
 node server/migration/inventory.mjs registry/v1/packages /absolute/new-inventory
 node server/migration/prepare.mjs /absolute/new-inventory /absolute/bundle STD@0.22.0 GFX@0.40.0
 php server/migration/verify-bundle.php /absolute/bundle
+node server/migration/plan.mjs /absolute/bundle /absolute/new-plan.json
 ```
 
 `inventory.mjs` refuse d'écraser un inventaire. Il observe les tags distants et
@@ -77,6 +78,11 @@ le préfixe publié ; relancer exactement la même commande reprend les uploads 
 retrouve les versions existantes. Une autre identité ou provenance est refusée.
 Les droits et provenances sont conservés dans les tables administratives
 `migration_owners` et `migration_versions`.
+
+`plan.mjs` calcule cet ordre depuis les seuls descripteurs préparés et signale
+les dépendances absentes ou cycliques. Il suit les contraintes exactes et caret
+du registre, sans imposer la convention npm pour les versions 0.x. Le plan
+n'autorise aucun rattachement et ne remplace pas l'admission finale du serveur.
 
 Les accès temporaires de l'import sont aléatoires, bornés à une heure, hachés en
 base et révoqués à la sortie normale ; un processus tué les laisse expirer.

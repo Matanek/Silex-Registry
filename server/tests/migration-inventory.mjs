@@ -6,6 +6,7 @@ import { git, tagsFromRefs, treeEntries, inventoryRegistration, sha256 } from '.
 import { prepareVersion, sourceArchive } from '../migration/prepare.mjs';
 import { gunzipSync } from 'node:zlib';
 import { readFile } from 'node:fs/promises';
+import { plan, satisfies } from '../migration/plan.mjs';
 
 const root = await mkdtemp(resolve(tmpdir(), 'silex-inventory-'));
 const repository = resolve(root, 'origin'), cache = resolve(root, 'git');
@@ -48,3 +49,14 @@ const longPath = 'long/'.repeat(30) + 'file.txt';
 assert.equal(gunzipSync(sourceArchive([{ path: longPath, bytes: Buffer.from('x') }])).subarray(345, 494).toString().replace(/\0+$/, ''), longPath.slice(0, longPath.lastIndexOf('/')));
 console.log('PASS inventory: annotated/lightweight tags, exact historical manifest, mismatch, ignored asset tags, unsafe entries');
 console.log('PASS preparation: deterministic USTAR, long names, exact bytes including export-ignore files, no current checkout substitution');
+assert(satisfies('0.22.0', '^0.16.5')); assert(!satisfies('1.0.0', '^0.16.5'));
+assert(!satisfies('0.16.4', '^0.16.5')); assert(!satisfies('0.22.0', '=0.16.5'));
+const route = plan([
+  { name: 'A', version: '1.0.0', dependencies: { B: '=1.0.0' } },
+  { name: 'B', version: '1.0.0' },
+  { name: 'C', version: '1.0.0', dependencies: { D: '^1.0.0' } },
+  { name: 'D', version: '1.0.0', dependencies: { C: '^1.0.0' } },
+  { name: 'E', version: '1.0.0', dependencies: { Missing: '=1.0.0' } },
+]);
+assert.deepEqual(route.ordered, ['B@1.0.0', 'A@1.0.0']); assert.equal(route.blocked.length, 3);
+console.log('PASS import plan: dependency-first order, exact/caret constraints, missing and cyclic closure reported');
