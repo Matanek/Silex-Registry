@@ -127,6 +127,24 @@ rétention et les alertes d'échec. Une copie locale de qualification ne constit
 pas à elle seule cette politique opérationnelle. Aucun service payant n'est choisi
 ou configuré par ces outils.
 
+`copy-snapshot.mjs` transporte un instantané déjà créé vers une nouvelle
+destination locale, soit depuis un chemin local, soit depuis SSH. L'empreinte
+du manifeste doit venir du reçu administratif, pas du même transfert non vérifié.
+Chaque fichier est contrôlé et synchronisé avant le marqueur final ; aucun tar
+n'est extrait. Relancer après une interruption dans une nouvelle destination,
+sans écraser ni purger la précédente. Le transport SSH emploie les accès
+administratifs existants, sans commande de modification sur la source :
+
+```sh
+node server/migration/copy-snapshot.mjs /remote/snapshot /absolute/new-local-backup MANIFEST_SHA256 user@host
+php server/bin/snapshot.php verify /absolute/new-local-backup MANIFEST_SHA256
+```
+
+Omettre `user@host` pour une copie locale. Restreindre le dossier de sauvegarde,
+vérifier le chiffrement du volume de destination et le conserver hors des caches
+de travail. Cet outil ne planifie pas les sauvegardes et ne remplace ni la
+rétention choisie ni un test périodique de restauration.
+
 ## Qualification
 
 `server/tests/migration-inventory.mjs` vérifie les tags et les archives déterministes.

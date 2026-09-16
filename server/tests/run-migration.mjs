@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
 import { sourceArchive } from '../migration/prepare.mjs';
 import { sha256 } from '../migration/inventory.mjs';
+import { copySnapshot } from '../migration/copy-snapshot.mjs';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const group = dirname(repository), php = process.argv[2];
@@ -92,6 +93,11 @@ const token = randomBytes(32).toString('hex'); await fixture('credential', { tok
 const snapshot = resolve(work, 'snapshot'), restored = resolve(work, 'restored');
 const backup = await fixture('snapshot', { destination: snapshot }); assert(backup.manifest_sha256);
 assert.equal((await fixture('verify', { snapshot, digest: backup.manifest_sha256 })).verified, true);
+const copied = resolve(work, 'copied');
+assert.equal((await copySnapshot(snapshot, copied, backup.manifest_sha256)).files, backup.files);
+assert.equal((await fixture('verify', { snapshot: copied, digest: backup.manifest_sha256 })).verified, true);
+await assert.rejects(copySnapshot(snapshot, copied, backup.manifest_sha256));
+await assert.rejects(copySnapshot(snapshot, resolve(work, 'wrong-digest'), '0'.repeat(64)), /snapshot_manifest_mismatch/);
 assert.equal((await fixture('restore', { snapshot, destination: restored, digest: backup.manifest_sha256 })).restored_files, backup.files);
 const before = await fixture('inspect'), after = await fixture('inspect', { root: restored });
 for (const key of ['names', 'versions', 'owners', 'provenance', 'objects']) assert.deepEqual(after[key], before[key]);
@@ -106,4 +112,8 @@ assert.equal((await fixture('restore', { snapshot, destination: resolve(work, 'r
 assert(!(await readdir(work)).includes('refused'));
 assert.equal((await fixture('verify', { snapshot, digest: '0'.repeat(64) })).error, 'snapshot_manifest_mismatch');
 pass('corrupt object or wrong snapshot digest refuses restoration before creating a destination');
+const corruptCopy = resolve(work, 'corrupt-copy');
+await assert.rejects(copySnapshot(snapshot, corruptCopy, backup.manifest_sha256), /snapshot_size_mismatch|snapshot_file_corrupt/);
+await assert.rejects(readFile(resolve(corruptCopy, 'snapshot.json')));
+pass('private snapshot transport verifies each byte, refuses overwrite and never seals a corrupt copy');
 console.log(`${checks} migration/snapshot groups passed. Evidence: ${work}`);
