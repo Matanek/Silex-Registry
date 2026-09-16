@@ -64,6 +64,22 @@ drop-in exact et rétablit le profil sans réseau ; elle ne touche ni aux versio
 ni aux sauvegardes. Un test de réponse de l'API ne vaut pas consentement d'une
 personne : le parcours complet nécessite sa propre autorisation sur GitHub.
 
+Depuis le groupe `Worktree/` de la Spec, avec le tunnel et le certificat décrits
+plus bas, sonder d'abord le relais local à certificat vérifié :
+
+```sh
+node Silex-Registry/server/tests/run-staging-journey.mjs /absolute/path/to/silex /absolute/path/to/tls.crt probe
+```
+
+Une fois le profil GitHub activé et la personne prête à saisir le code affiché,
+remplacer `probe` par `live`. Ce banc lance le vrai CLI, publie un nom de test
+unique depuis un dossier sans Git, révoque l'accès, puis installe et exécute
+le package depuis un magasin consommateur vide. Un relais HTTP éphémère sur
+loopback permet seulement au mode de qualification du CLI de joindre le HTTPS
+du staging ; il vérifie le certificat distant et n'est pas une option de
+registre de production. Le code GitHub expire rapidement ; ne pas lancer le
+mode `live` sans que la personne puisse autoriser immédiatement l'application.
+
 ## Sauvegarder le magasin actif
 
 `silex-registry-stage-snapshot` crée un instantané du magasin réellement servi
