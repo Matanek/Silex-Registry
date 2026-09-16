@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, readdir, utimes } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, readdir, utimes } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,7 +16,8 @@ assert.equal(process.cwd(), group, 'Run from the Spec Worktree group.');
 const parent = resolve(group, 'TestState/server');
 await mkdir(parent, { recursive: true });
 const root = await mkdtemp(`${parent}/run-`);
-const limits = { reserve: 1048576, capacity: 8388608, chunk: 4096, sessions: 100, grace: 1 };
+const limits = { reserve: 1048576, capacity: 8388608, chunk: 4096, sessions: 100, grace: 1,
+  expanded: 65536, files: 32 };
 const token = randomBytes(32).toString('hex');
 const other = randomBytes(32).toString('hex');
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -65,7 +66,7 @@ function publication(name, version = '1.0.0', options = {}) {
     artifacts: { 'macos-arm64': { Native: { path: 'Native/a.bin', sha256: sha(shared) } },
       'linux-x64': { Native: { path: 'Native/b.bin', sha256: sha(second) } } }, ...options.manifest });
   const entries = [{ path: 'Package.json', bytes: Buffer.from(manifest) },
-    { path: 'Module/Content.txt', bytes: Buffer.from(options.text ?? '<?php throw new Exception("must not execute"); ?>') }];
+    { path: options.sourcePath ?? 'Module/Content.txt', bytes: Buffer.from(options.text ?? '<?php throw new Exception("must not execute"); ?>') }];
   const source = options.source ?? gzipSync(tar(options.entries ? options.entries(entries) : entries));
   const descriptor = { schema: 1, manifest, source: { size: source.length, sha256: sha(source) },
     files: entries.map(({ path, bytes }) => ({ path, size: bytes.length, sha256: sha(bytes) })),
@@ -234,6 +235,26 @@ try {
   const invalid = publication('Gzip', '1.0.0', { source: Buffer.from('invalid gzip') });
   const invalidSession = await create(invalid); await upload(invalid, invalidSession); await finish(invalidSession, token, 422);
   pass('hash retry works; links, traversal, duplicate/missing files and invalid gzip never publish');
+
+  const inflated = publication('Inflated', '1.0.0', { entries: entries => [...entries,
+    { path: 'Module/Filler.txt', bytes: Buffer.alloc(262144) }] });
+  const inflatedSession = await create(inflated);
+  await upload(inflated, inflatedSession);
+  const inflateFailure = await finish(inflatedSession, token, 413);
+  assert.equal(inflateFailure.value.error, 'expanded_limit');
+  await request(base, '/v2/packages/Inflated', { status: 404 });
+  const canary = `${root}-php-canary`;
+  const executable = publication('ExecutableData', '1.0.0', { sourcePath: 'Module/Canary.php',
+    text: `<?php file_put_contents(${JSON.stringify(canary)}, 'executed'); ?>` });
+  const executableSession = await create(executable);
+  await upload(executable, executableSession); await finish(executableSession);
+  const served = await request(base, '/v2/packages/ExecutableData/versions/1.0.0/source');
+  assert.deepEqual(served.bytes, executable.blobs.get(executable.descriptor.source.sha256));
+  assert.equal(served.response.headers.get('content-type'), 'application/octet-stream');
+  assert.match(served.response.headers.get('content-disposition'), /^attachment;/);
+  await request(base, '/v2/packages/ExecutableData/versions/1.0.0/Module/Canary.php', { status: 404 });
+  await assert.rejects(access(canary), { code: 'ENOENT' });
+  pass('over-expanded gzip stays private; PHP payload remains inert data when published and served');
 
   for (const path of ['../escape', '/absolute', 'C:/file', 'a\\b', 'a/.git/config', 'NUL.txt', 'bad.']) {
     const unsafe = publication('Paths'); unsafe.descriptor.files[1].path = path;

@@ -40,6 +40,11 @@ data root and HTTP addresses. It creates a new empty store under
 It stops both processes on completion/failure and retains each store as evidence.
 The test suite never uses production credentials, package links, a Silex cache or
 the deployed registry. It also rebuilds `/v1` into its own separate output folder.
+The independent HTTP client also submits a highly compressible source that exceeds
+the test expansion limit and a PHP canary inside a published archive. It checks
+that the former never becomes visible and the latter is returned only as binary
+data, without creating the canary file. This does not prove process-account or
+web-server isolation on the VPS.
 
 `tests/fixture.php` is CLI-only, outside `public/`, and injects identities and
 short-lived tokens directly into the test database. Crash hooks are injected
