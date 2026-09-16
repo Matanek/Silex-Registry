@@ -20,9 +20,17 @@ if ($role === 'fpm') {
     $canary = '/data/isolation-' . bin2hex(random_bytes(8));
     check(file_put_contents($canary, 'own data') === 8, 'own storage writable');
     check(unlink($canary), 'own temporary data removed');
-    foreach (['tcp://127.0.0.1:80', 'tcp://1.1.1.1:443'] as $endpoint) {
-        $socket = @stream_socket_client($endpoint, $errno, $error, 1);
-        check($socket === false, "outbound TCP denied: $endpoint");
+    $clientId = getenv('SILEX_GITHUB_CLIENT_ID');
+    if (is_string($clientId) && $clientId !== '') {
+        check(preg_match('/^[A-Za-z0-9_]{16,64}$/D', $clientId) === 1, 'GitHub client ID');
+        check(extension_loaded('curl'), 'GitHub transport');
+        check(is_readable('/etc/ssl/certs/ca-certificates.crt'), 'GitHub CA bundle');
+        check(is_readable('/etc/resolv.conf'), 'GitHub DNS configuration');
+    } else {
+        foreach (['tcp://127.0.0.1:80', 'tcp://1.1.1.1:443'] as $endpoint) {
+            $socket = @stream_socket_client($endpoint, $errno, $error, 1);
+            check($socket === false, "outbound TCP denied: $endpoint");
+        }
     }
 } else {
     check(!file_exists('/data/registry.sqlite'), 'database hidden from gateway');

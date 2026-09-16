@@ -17,7 +17,7 @@ options=(-o "Dir::Etc::sourcelist=$aptroot/sources.list" -o Dir::Etc::sourcepart
   -o "Dir::Cache::archives=$aptroot/archives" -o APT::Install-Recommends=false)
 apt-get "${options[@]}" update
 apt-get "${options[@]}" --download-only --yes install \
-  php8.2-cli php8.2-fpm php8.2-intl php8.2-mbstring php8.2-sqlite3 apache2-bin openssl
+  php8.2-cli php8.2-fpm php8.2-intl php8.2-mbstring php8.2-sqlite3 php8.2-curl apache2-bin openssl
 for package in "$aptroot"/archives/*.deb; do
   dpkg-deb -x "$package" "$base/root"
 done

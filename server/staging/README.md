@@ -36,12 +36,33 @@ que le montage du socket côté passerelle reste valide ; il disparaît à l'arr
 complet du service. Les résultats
 des sondes de démarrage sont aussi conservés par journald.
 
-Le profil sans réseau laisse la connexion GitHub désactivée. Le banc injecte
-des identités synthétiques via l'administrateur SSH et révoque ses jetons dans
-un bloc de nettoyage. Aucune route HTTP ne permet cette injection. Les limites
-réduites de `limits.json` servent aux cas adverses et ne sont pas des quotas de
-production. La qualification OAuth sur cet hôte reste à traiter avant une
-ouverture publique.
+Le profil installé par défaut reste sans réseau et laisse la connexion GitHub
+désactivée. Le banc injecte des identités synthétiques via l'administrateur SSH
+et révoque ses jetons dans un bloc de nettoyage. Aucune route HTTP ne permet
+cette injection. Les limites réduites de `limits.json` servent aux cas adverses
+et ne sont pas des quotas de production.
+
+## Connexion GitHub sur le staging privé
+
+Après avoir préparé le runtime avec `php8.2-curl`, le profil optionnel du
+staging autorise les connexions sortantes nécessaires au device flow.
+Il conserve le socket FPM local, la racine en lecture seule, les comptes
+distincts et l'absence de montage du registre public. Le code de l'adaptateur
+GitHub n'appelle que trois URL HTTPS fixes, interdit les redirections et vérifie
+les certificats. Le filtrage réseau de ce profil n'est toutefois pas limité
+aux adresses GitHub : cette différence avec le profil hors ligne doit être
+prise en compte avant une ouverture publique.
+
+```sh
+sudo /usr/local/libexec/silex-registry-stage-github enable
+sudo /usr/local/libexec/silex-registry-stage-github disable
+```
+
+La commande `enable` installe un drop-in systemd portant seulement l'identifiant
+public de l'application OAuth dédiée, puis redémarre FPM. `disable` retire ce
+drop-in exact et rétablit le profil sans réseau ; elle ne touche ni aux versions
+ni aux sauvegardes. Un test de réponse de l'API ne vaut pas consentement d'une
+personne : le parcours complet nécessite sa propre autorisation sur GitHub.
 
 ## Sauvegarder le magasin actif
 

@@ -17,6 +17,8 @@ for account in silex-registry-stage silex-registry-stage-web; do
   fi
 done
 install -d -m 0755 "$base/releases" "$root/etc/stage" "$root/app" "$root/data" "$root/snapshots" "$root/run/stage" "$root/run/web" "$root/tmp"
+install -d -m 0755 "$root/etc/ssl/certs"
+touch "$root/etc/resolv.conf"
 install -d -m 0700 -o silex-registry-stage -g silex-registry-stage "$base/data"
 install -d -m 0700 -o silex-registry-stage -g silex-registry-stage "$base/backups"
 install -d -m 0750 -o root -g silex-registry-stage-web "$base/gateway"
@@ -67,6 +69,7 @@ done
 install -d -m 0755 /usr/local/libexec
 install -m 0700 "$config/fixture.sh" /usr/local/libexec/silex-registry-stage-fixture
 install -m 0700 "$config/snapshot-stage.sh" /usr/local/libexec/silex-registry-stage-snapshot
+install -m 0700 "$config/github-stage.sh" /usr/local/libexec/silex-registry-stage-github
 systemd-analyze verify /etc/systemd/system/silex-registry-stage.service /etc/systemd/system/silex-registry-stage-web.service
 systemctl daemon-reload
 systemctl reset-failed silex-registry-stage.service silex-registry-stage-web.service
