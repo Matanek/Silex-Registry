@@ -1,0 +1,50 @@
+[Unit]
+Description=Silex registry v2 private staging PHP-FPM
+After=local-fs.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
+[Service]
+Type=simple
+User=silex-registry-stage
+Group=silex-registry-stage
+RootDirectory=/var/lib/silex-registry-stage/root
+MountAPIVFS=yes
+WorkingDirectory=/app
+Environment=PHP_INI_SCAN_DIR=
+ExecStart=/usr/sbin/php-fpm8.2 -c /etc/stage/php.ini -y /etc/stage/fpm.conf -F
+ExecStartPre=/usr/bin/php8.2 -c /etc/stage/php.ini /etc/stage/isolation.php fpm
+ExecStartPre=/usr/sbin/php-fpm8.2 -c /etc/stage/php.ini -y /etc/stage/fpm.conf -t
+RuntimeDirectory=silex-registry-stage
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=restart
+BindPaths=/var/lib/silex-registry-stage/data:/data /run/silex-registry-stage:/run/stage
+BindReadOnlyPaths=/var/lib/silex-registry-stage/current:/app
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/data /run/stage
+TemporaryFileSystem=/tmp:rw,nosuid,nodev,noexec,size=32M
+PrivateDevices=yes
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectKernelLogs=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=~@mount @reboot @swap @raw-io @privileged
+UMask=0077
+MemoryMax=384M
+TasksMax=16
+CPUQuota=100%
+LimitNOFILE=256
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+[Install]
+WantedBy=multi-user.target
