@@ -74,6 +74,10 @@ try {
     } else throw new Rejection(404, 'route_not_found');
     if ($method !== 'HEAD') echo json_encode($result, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
 } catch (Throwable $error) {
+    if (!$error instanceof Rejection) {
+        // Never log exception messages, request values, paths or credentials.
+        error_log('registry failure: ' . get_class($error) . ' at ' . basename($error->getFile()) . ':' . $error->getLine());
+    }
     $status = $error instanceof Rejection ? $error->status : 503;
     $reason = $error instanceof Rejection ? $error->reason : 'storage_unavailable';
     http_response_code($status);
