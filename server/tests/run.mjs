@@ -138,7 +138,9 @@ try {
 
   const source = p.descriptor.source;
   const objectURL = `/v2/publications/${s.id}/objects/${source.sha256}`;
+  await request(base, objectURL, { method: 'PATCH', offset: 0, body: Buffer.from('x'), status: 401 });
   await request(base, objectURL, { method: 'PATCH', credential: other, offset: 0, body: Buffer.from('x'), status: 403 });
+  await request(base, objectURL, { method: 'HEAD', credential: other, status: 403 });
   const prefix = p.blobs.get(source.sha256).subarray(0, 30);
   await request(base, objectURL, { method: 'PATCH', credential: token, offset: 0, body: prefix });
   await request(base, objectURL, { method: 'PATCH', credential: token, offset: 0, body: prefix, status: 409 });
@@ -223,6 +225,9 @@ try {
   await upload(bad, badSession); await finish(badSession);
   const cases = [
     ['Symlink', entries => [...entries, { path: 'link', bytes: Buffer.alloc(0), type: '2', link: '/etc/passwd' }]],
+    ['Hardlink', entries => [...entries, { path: 'hard', bytes: Buffer.alloc(0), type: '1', link: 'Package.json' }]],
+    ['Directory', entries => [...entries, { path: 'newdir', bytes: Buffer.alloc(0), type: '5' }]],
+    ['Fifo', entries => [...entries, { path: 'pipe', bytes: Buffer.alloc(0), type: '6' }]],
     ['Traversal', entries => [...entries, { path: '../outside', bytes: Buffer.alloc(0) }]],
     ['Duplicate', entries => [...entries, entries[0]]],
     ['Missing', entries => entries.slice(1)],
@@ -234,7 +239,7 @@ try {
   }
   const invalid = publication('Gzip', '1.0.0', { source: Buffer.from('invalid gzip') });
   const invalidSession = await create(invalid); await upload(invalid, invalidSession); await finish(invalidSession, token, 422);
-  pass('hash retry works; links, traversal, duplicate/missing files and invalid gzip never publish');
+  pass('hash retry works; links, special entries, traversal, duplicate/missing files and invalid gzip never publish');
 
   const inflated = publication('Inflated', '1.0.0', { entries: entries => [...entries,
     { path: 'Module/Filler.txt', bytes: Buffer.alloc(262144) }] });
@@ -270,6 +275,10 @@ try {
   const size = publication('Limits');
   size.descriptor.source.size = 16777217;
   await request(base, '/v2/publications', { method: 'POST', credential: token, body: size.descriptor, status: 413 });
+  const tooMany = publication('TooMany');
+  for (let i = 0; i < limits.files; i++) tooMany.descriptor.files.push({
+    path: `Module/Extra${i}.txt`, size: 0, sha256: sha(Buffer.alloc(0)) });
+  await request(base, '/v2/publications', { method: 'POST', credential: token, body: tooMany.descriptor, status: 413 });
   await request(base, objectURL, { method: 'PATCH', credential: token, offset: 0, body: Buffer.alloc(limits.chunk + 1), status: 413 });
   const quota = publication('Quota'); quota.descriptor.artifacts.forEach(artifact => { artifact.size = limits.capacity; });
   await request(base, '/v2/publications', { method: 'POST', credential: token, body: quota.descriptor, status: 429 });
