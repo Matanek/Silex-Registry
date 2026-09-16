@@ -34,6 +34,26 @@ CLI, relit la version et la source publiques, puis relance la commande pour
 vérifier sa reprise idempotente. Il n'utilise ni OAuth GitHub réel ni magasin
 utilisateur.
 
+Un parcours intégré macOS ARM64 relie la connexion du vrai CLI, la publication
+d'un package sans Git, un instantané, la révocation, la restauration et
+l'installation anonyme suivie de l'exécution native d'un consommateur :
+
+```sh
+node Silex-Registry/server/tests/run-journey.mjs /absolute/path/to/php /absolute/path/to/silex offline
+```
+
+Le mode `offline` simule uniquement le fournisseur GitHub. Pour un essai avec
+consentement personnel, remplacer `offline` par `live PUBLIC_CLIENT_ID` ; le
+script affiche le code humain et l'adresse GitHub, sans ouvrir ni approuver
+la page. Il attend au plus seize minutes. Aucun secret client n'est demandé.
+Les données et accès restent sous un nouveau `TestState/journey/run-*`, les
+serveurs écoutent seulement sur loopback et sont arrêtés à la fin. Après la
+connexion, le parcours restaure un service sans configuration OAuth ; le
+consommateur utilise un magasin vide, un Git sentinelle et un proxy refusant
+les origines externes. Les instantanés privés restent des preuves de test,
+pas des sauvegardes de production. Un succès `offline` ne vaut pas consentement
+GitHub réel, et ce parcours ne qualifie pas Linux, Windows ou un déploiement HTTPS.
+
 The launcher prints the repository, baseline SHA, PHP executable/version, limits,
 data root and HTTP addresses. It creates a new empty store under
 `Worktree/TestState/server/` and starts two independent PHP processes on loopback.
