@@ -112,6 +112,42 @@ function validateEditorialMetadata(manifest) {
       new Set(manifest.catalogs).size === manifest.catalogs.length, 'invalid_catalogs');
   }
 }
+function validateBoundary(boundary) {
+  if (boundary === undefined) return;
+  insist(boundary && typeof boundary === 'object' && !Array.isArray(boundary), 'invalid_boundary');
+  for (const [target, declaration] of Object.entries(boundary)) {
+    insist(targets.has(target) && exactKeys(declaration, ['providers']) &&
+      declaration.providers && typeof declaration.providers === 'object' &&
+      !Array.isArray(declaration.providers), 'invalid_boundary');
+    for (const [name, provider] of Object.entries(declaration.providers)) {
+      insist(validModuleName(name) && !name.includes('.') && provider && typeof provider === 'object' &&
+        !Array.isArray(provider) && Object.keys(provider).length > 0 &&
+        Object.keys(provider).every(key => ['archive', 'frameworks', 'libraries', 'requires'].includes(key)),
+      'invalid_boundary');
+      if (provider.archive !== undefined) insist(safePath(provider.archive), 'invalid_boundary');
+      if (provider.frameworks !== undefined) {
+        insist(Array.isArray(provider.frameworks) && provider.frameworks.every(item =>
+          validModuleName(item) && !item.includes('.')) &&
+          new Set(provider.frameworks).size === provider.frameworks.length &&
+          (target.startsWith('macos-') || provider.frameworks.length === 0), 'invalid_boundary');
+      }
+      if (provider.libraries !== undefined) {
+        insist(Array.isArray(provider.libraries) && provider.libraries.every(item =>
+          typeof item === 'string' && /^[A-Za-z0-9_.+-]+$/.test(item)) &&
+          new Set(provider.libraries).size === provider.libraries.length, 'invalid_boundary');
+      }
+      if (provider.requires !== undefined) {
+        insist(Array.isArray(provider.requires) && provider.requires.every(item => {
+          if (!validModuleName(item)) return false;
+          const separator = item.lastIndexOf('.');
+          return separator > 0 && !item.slice(separator + 1).includes('.');
+        }) && new Set(provider.requires).size === provider.requires.length, 'invalid_boundary');
+      }
+      insist(provider.archive !== undefined || provider.frameworks?.length ||
+        provider.libraries?.length || provider.requires?.length, 'invalid_boundary');
+    }
+  }
+}
 function validateManifest(manifest) {
   const fields = new Set(['name', 'version', 'repository', 'sources', 'description', 'authors', 'extensions',
     'friends', 'catalogs', 'requires', 'dependencies', 'devDependencies', 'boundary', 'artifacts']);
@@ -120,6 +156,7 @@ function validateManifest(manifest) {
   insist(manifest.friends === undefined, 'invalid_friends');
   insist(validName(manifest?.name) && parseVersion(manifest?.version), 'invalid_identity');
   validateEditorialMetadata(manifest);
+  validateBoundary(manifest.boundary);
   if (manifest.repository !== undefined) insist(typeof manifest.repository === 'string' &&
     manifest.repository.length <= 200 && /^https:\/\/github\.com\/[A-Za-z0-9-]{1,39}\/[A-Za-z0-9_.-]{1,100}$/.test(manifest.repository) &&
     !['.', '..'].includes(manifest.repository.split('/').at(-1)), 'invalid_repository');
@@ -252,6 +289,14 @@ export function descriptor(value) {
   }
   for (const [target, named] of Object.entries(manifest.artifacts ?? {})) {
     for (const name of Object.keys(named)) insist(entries.has(`${target}/${name}`), 'missing_target_artifact');
+  }
+  const sourcePaths = new Set(value.files.map(file => file.path));
+  for (const [target, boundary] of Object.entries(manifest.boundary ?? {})) {
+    for (const provider of Object.values(boundary.providers)) {
+      if (provider.archive !== undefined) insist(sourcePaths.has(provider.archive) ||
+        value.artifacts.some(item => item.target === target && item.path === provider.archive),
+      'missing_boundary_archive');
+    }
   }
   validatePaths(value.files, value.artifacts);
   return { manifest, objects };

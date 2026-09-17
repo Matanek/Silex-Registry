@@ -83,6 +83,34 @@ test('admit supported editorial metadata and reject manifests that Silex cannot 
   rejected(withManifest(fixture(), manifest => { manifest.catalogs = ['Another.Components']; }), 'invalid_catalogs');
 });
 
+test('admit native boundary declarations for each target and reject unusable providers', () => {
+  descriptor(withManifest(fixture(), manifest => { manifest.boundary = {
+    'macos-arm64': { providers: { Shared: { archive: 'Boundary/libShared.a', frameworks: ['Cocoa'] } } },
+    'linux-x64': { providers: { Runtime: { libraries: ['pthread'], requires: ['Core.Native'] } } },
+  }; }));
+  const embedded = withManifest(fixture(), manifest => { manifest.boundary = {
+    'linux-x64': { providers: { Runtime: { archive: 'Boundary/linux/runtime.a' } } },
+  }; });
+  embedded.files.push({ path: 'Boundary/linux/runtime.a', size: 1, sha256: sha('x') });
+  descriptor(embedded);
+  rejected(withManifest(fixture(), manifest => { manifest.boundary = { 'unknown-x64': { providers: {} } }; }), 'invalid_boundary');
+  rejected(withManifest(fixture(), manifest => { manifest.boundary = { 'linux-x64': { providers: {
+    Runtime: { frameworks: ['Cocoa'] },
+  } } }; }), 'invalid_boundary');
+  rejected(withManifest(fixture(), manifest => { manifest.boundary = { 'macos-arm64': { providers: {
+    Runtime: { archive: '../outside.a' },
+  } } }; }), 'invalid_boundary');
+  rejected(withManifest(fixture(), manifest => { manifest.boundary = { 'macos-arm64': { providers: {
+    Runtime: { archive: 'Boundary/missing.a' },
+  } } }; }), 'missing_boundary_archive');
+  rejected(withManifest(fixture(), manifest => { manifest.boundary = { 'macos-arm64': { providers: {
+    Runtime: { requires: ['Unqualified'] },
+  } } }; }), 'invalid_boundary');
+  rejected(withManifest(fixture(), manifest => { manifest.boundary = { 'macos-arm64': { providers: {
+    Runtime: { libraries: [] },
+  } } }; }), 'invalid_boundary');
+});
+
 test('resolve caret dependencies with numeric version order', () => {
   assert.equal(acceptsDependency('^1.2.0', '1.10.0'), true);
   assert.equal(acceptsDependency('^1.2.0', '1.1.9'), false);
