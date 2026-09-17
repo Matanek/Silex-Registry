@@ -1,0 +1,15 @@
+name = "silex-registry-staging-probe"
+main = "src/worker.mjs"
+compatibility_date = "2026-09-17"
+workers_dev = true
+account_id = "99527982b858a931d1a2f7a4bcc7b49d"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "silex-registry-staging"
+database_id = "e40f547b-07d2-4119-9144-f8e2b80d13c2"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "OBJECTS"
+bucket_name = "silex-registry-staging"
