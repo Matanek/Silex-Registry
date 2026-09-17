@@ -5,7 +5,7 @@ import { ArchiveFailure, verifySourceArchive } from './archive.mjs';
 const encoder = new TextEncoder();
 const sha = /^[a-f0-9]{64}$/;
 const namePattern = /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/;
-const versionPattern = /^[0-9]+\.[0-9]+\.[0-9]+$/;
+const versionPattern = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
 const targets = new Set(['macos-arm64', 'macos-x64', 'linux-arm64', 'linux-x64', 'windows-arm64', 'windows-x64']);
 const maxMetadata = 262144;
 const maxChunk = 65536;
@@ -28,6 +28,83 @@ function canonical(value) {
 function exactKeys(value, keys) {
   return value && typeof value === 'object' && !Array.isArray(value) &&
     Object.keys(value).sort().join(',') === [...keys].sort().join(',');
+}
+function version(text) {
+  const match = typeof text === 'string' ? versionPattern.exec(text) : null;
+  if (!match || match.slice(1).some(part => part.length > 10 || Number(part) > 4294967295)) return null;
+  return match.slice(1).map(Number);
+}
+function compareVersions(left, right) {
+  for (let i = 0; i < 3; i++) if (left[i] !== right[i]) return Math.sign(left[i] - right[i]);
+  return 0;
+}
+function validName(name) {
+  return typeof name === 'string' && name.length <= 128 && namePattern.test(name) &&
+    !['Package', 'Module'].includes(name.split('.')[0]);
+}
+function safePath(path) {
+  if (typeof path !== 'string' || !path || encoder.encode(path).byteLength > 240 || path.normalize('NFC') !== path ||
+    /[\x00-\x1f\x7f\\:<>"|?*]/u.test(path)) return false;
+  for (const scalar of path) {
+    const code = scalar.codePointAt(0);
+    if (code >= 0xd800 && code <= 0xdfff) return false;
+  }
+  return path.split('/').every(part => part && part !== '.' && part !== '..' && !/[. ]$/.test(part) &&
+    !['.git', '.silex'].includes(part.toLowerCase()) &&
+    !/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i.test(part));
+}
+function noPathCollision(paths) {
+  const keys = new Set();
+  for (const path of paths) {
+    const key = path.toLowerCase();
+    insist(!keys.has(key), 'path_collision');
+    keys.add(key);
+  }
+  for (const key of keys) {
+    for (let slash = key.indexOf('/'); slash >= 0; slash = key.indexOf('/', slash + 1)) {
+      insist(!keys.has(key.slice(0, slash)), 'path_collision');
+    }
+  }
+}
+function validateManifest(manifest) {
+  insist(validName(manifest?.name) && version(manifest?.version), 'invalid_identity');
+  insist(exactKeys(manifest.requires, ['silex']) && typeof manifest.requires.silex === 'string', 'invalid_requirement');
+  const clauses = manifest.requires.silex.split(' ');
+  const minimum = clauses[0].startsWith('>=') ? version(clauses[0].slice(2)) : null;
+  const maximum = clauses.length === 2 && clauses[1].startsWith('<') ? version(clauses[1].slice(1)) : null;
+  insist(clauses.length <= 2 && minimum && (clauses.length === 1 || (maximum && compareVersions(maximum, minimum) > 0)),
+    'invalid_requirement');
+  if (manifest.sources !== undefined) insist(manifest.sources === '.' || safePath(manifest.sources), 'invalid_sources');
+  for (const key of ['dependencies', 'devDependencies']) {
+    const dependencies = manifest[key];
+    if (dependencies === undefined) continue;
+    insist(dependencies && typeof dependencies === 'object' && !Array.isArray(dependencies), 'invalid_dependencies');
+    for (const [name, constraint] of Object.entries(dependencies)) {
+      insist(validName(name) && name !== manifest.name && typeof constraint === 'string' &&
+        ['=', '^'].includes(constraint[0]) && version(constraint.slice(1)) &&
+        (key !== 'devDependencies' || !Object.hasOwn(manifest.dependencies ?? {}, name)), 'invalid_dependency');
+    }
+  }
+  if (manifest.artifacts !== undefined) {
+    insist(manifest.artifacts && typeof manifest.artifacts === 'object' && !Array.isArray(manifest.artifacts),
+      'invalid_artifacts');
+    for (const [target, named] of Object.entries(manifest.artifacts)) {
+      insist(targets.has(target) && named && typeof named === 'object' && !Array.isArray(named) &&
+        Object.keys(named).length > 0, 'invalid_artifacts');
+    }
+  }
+}
+function validatePaths(files, artifacts) {
+  const source = files.map(file => file.path);
+  noPathCollision(source);
+  for (const target of targets) noPathCollision([...source, ...artifacts.filter(item => item.target === target).map(item => item.path)]);
+}
+export function acceptsDependency(constraint, candidate) {
+  const minimum = version(constraint.slice(1));
+  const found = version(candidate);
+  if (!minimum || !found) return false;
+  return constraint[0] === '=' ? compareVersions(found, minimum) === 0 :
+    constraint[0] === '^' && found[0] === minimum[0] && compareVersions(found, minimum) >= 0;
 }
 function hex(bytes) { return Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, '0')).join(''); }
 async function digest(bytes) { return hex(await crypto.subtle.digest('SHA-256', bytes)); }
@@ -53,7 +130,7 @@ async function jsonBody(request) {
   try { return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); }
   catch { throw new Rejection(422, 'invalid_json'); }
 }
-function descriptor(value) {
+export function descriptor(value) {
   insist(value && typeof value === 'object' && !Array.isArray(value) && value.schema === 1, 'unsupported_descriptor');
   insist(exactKeys(value, value.provenance === undefined ?
     ['artifacts', 'files', 'manifest', 'schema', 'source'] :
@@ -62,19 +139,14 @@ function descriptor(value) {
   insist(typeof value.manifest === 'string' && value.manifest.length <= maxMetadata, 'invalid_manifest');
   let manifest;
   try { manifest = JSON.parse(value.manifest); } catch { throw new Rejection(422, 'invalid_manifest'); }
-  insist(namePattern.test(manifest?.name ?? '') && manifest.name.length <= 128 &&
-    versionPattern.test(manifest?.version ?? ''), 'invalid_identity');
+  validateManifest(manifest);
   insist(exactKeys(value.source, ['sha256', 'size']) && sha.test(value.source.sha256 ?? '') && Number.isSafeInteger(value.source.size) &&
     value.source.size > 0 && value.source.size <= maxObject, 'invalid_source');
   insist(Array.isArray(value.files) && value.files.length > 0 && value.files.length <= 4096, 'invalid_files');
-  const files = new Set();
   let expanded = 0;
   for (const file of value.files) {
-    insist(exactKeys(file, ['path', 'sha256', 'size']) && typeof file.path === 'string' && file.path.length > 0 && file.path.length <= 512 &&
-      !file.path.startsWith('/') && !file.path.split('/').some(part => !part || part === '.' || part === '..' || part.includes('\\')) &&
+    insist(exactKeys(file, ['path', 'sha256', 'size']) && safePath(file.path) &&
       sha.test(file.sha256 ?? '') && Number.isSafeInteger(file.size) && file.size >= 0 && file.size <= 16 * 1024 * 1024, 'invalid_file');
-    insist(!files.has(file.path.toLowerCase()), 'path_collision');
-    files.add(file.path.toLowerCase());
     expanded += file.size;
     insist(expanded <= 16 * 1024 * 1024, 'expanded_limit', 413);
   }
@@ -85,9 +157,8 @@ function descriptor(value) {
   insist(Array.isArray(value.artifacts) && value.artifacts.length <= 256, 'invalid_artifacts');
   const entries = new Set();
   for (const item of value.artifacts) {
-    insist(exactKeys(item, ['name', 'path', 'sha256', 'size', 'target']) && targets.has(item.target) && namePattern.test(item.name ?? '') &&
-      typeof item.path === 'string' && item.path.length > 0 && !item.path.startsWith('/') &&
-      !item.path.split('/').some(part => !part || part === '.' || part === '..' || part.includes('\\')) &&
+    insist(exactKeys(item, ['name', 'path', 'sha256', 'size', 'target']) && targets.has(item.target) && validName(item.name) &&
+      safePath(item.path) &&
       sha.test(item.sha256 ?? '') && Number.isSafeInteger(item.size) && item.size > 0 && item.size <= maxObject,
     'invalid_artifact');
     insist(!entries.has(`${item.target}/${item.name}`), 'duplicate_artifact');
@@ -98,9 +169,9 @@ function descriptor(value) {
     objects.set(item.sha256, item.size);
   }
   for (const [target, named] of Object.entries(manifest.artifacts ?? {})) {
-    insist(targets.has(target) && named && typeof named === 'object', 'invalid_artifacts');
     for (const name of Object.keys(named)) insist(entries.has(`${target}/${name}`), 'missing_target_artifact');
   }
+  validatePaths(value.files, value.artifacts);
   return { manifest, objects };
 }
 async function authenticate(request, env) {
@@ -262,9 +333,7 @@ async function finalize(request, env, row, verify) {
     }
     for (const [name, constraint] of Object.entries(manifest.dependencies ?? {})) {
       const versions = await env.DB.prepare('SELECT version FROM probe_versions WHERE name=?').bind(name).all();
-      const wanted = String(constraint).slice(1);
-      insist(versions.results.some(found => constraint[0] === '=' ? found.version === wanted :
-        constraint[0] === '^' && found.version.split('.')[0] === wanted.split('.')[0] && found.version >= wanted),
+      insist(versions.results.some(found => acceptsDependency(String(constraint), found.version)),
       'missing_dependency', 409);
     }
     probeFault(request, env, 'before_visibility');

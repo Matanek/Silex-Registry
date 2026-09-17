@@ -25,17 +25,27 @@ function fixture(name, version, shared, suffix = '') {
     artifacts: { 'macos-arm64': { Shared: { path: 'Boundary/macos-arm64/libShared.a', sha256: sharedDigest } } } });
   const module = Buffer.from(`public func answer() int { return 42 } // ${suffix}\n`);
   const source = archive([['Package.json', manifest], ['Module/Value.sx', module]]);
-  return { source, descriptor: { schema: 1, manifest,
+  return { source, module, descriptor: { schema: 1, manifest,
     source: { size: source.length, sha256: sha(source) },
     files: [{ path: 'Package.json', size: Buffer.byteLength(manifest), sha256: sha(manifest) },
       { path: 'Module/Value.sx', size: module.length, sha256: sha(module) }],
     artifacts: [{ target: 'macos-arm64', name: 'Shared', path: 'Boundary/macos-arm64/libShared.a',
       size: shared.length, sha256: sharedDigest }] } };
 }
+function reviseManifest(item, change) {
+  const manifest = JSON.parse(item.descriptor.manifest);
+  change(manifest);
+  item.descriptor.manifest = JSON.stringify(manifest);
+  item.descriptor.files[0] = { path: 'Package.json', size: Buffer.byteLength(item.descriptor.manifest),
+    sha256: sha(item.descriptor.manifest) };
+  item.source = archive([['Package.json', item.descriptor.manifest], ['Module/Value.sx', item.module]]);
+  item.descriptor.source = { size: item.source.length, sha256: sha(item.source) };
+  return item;
+}
 async function begin(value) {
   return call('POST', '/v2/publications', JSON.stringify(value.descriptor));
 }
-async function upload(id, hash, bytes, from = 0, chunkSize = 7) {
+async function upload(id, hash, bytes, from = 0, chunkSize = Number(process.env.PROBE_UPLOAD_CHUNK_SIZE ?? 7)) {
   const path = `/v2/publications/${id}/objects/${hash}`;
   for (let offset = from; offset < bytes.length; offset += chunkSize) {
     const result = await call('PATCH', path, bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length)), true, offset);
@@ -118,6 +128,12 @@ test('staging probe: hash, resume, immutable versions and shared artifact', { sk
   const missing = fixture(`${name}_Missing`, '1.0.0', shared);
   missing.descriptor.artifacts = [];
   assert.equal((await begin(missing)).status, 422);
+  const unsafe = fixture(`${name}_Unsafe`, '1.0.0', shared);
+  unsafe.descriptor.files[1].path = 'Module/CON.txt';
+  const refused = await begin(unsafe);
+  assert.equal(refused.status, 422, JSON.stringify(refused.json));
+  assert.equal(refused.json.error, 'invalid_file');
+  assert.equal((await call('GET', `/v2/packages/${name}_Unsafe`, undefined, false)).status, 404);
 });
 
 test('staging probe: interruption around R2 persistence and D1 visibility',
@@ -208,4 +224,33 @@ test('staging probe: same-version race and cross-run object retention',
     assert.equal(inventory.status, 200);
     assert.equal(inventory.json.objects.filter(object => object.key === `probe/objects/sha256/${sha(shared)}`).length, 1);
     console.log(JSON.stringify({ runId: stamp, holdRunId: holdStamp, retainedDigest: sha(shared) }));
+});
+
+test('staging probe: dependency versions use numeric order before visibility',
+  { skip: !origin || process.env.PROBE_TEST_DEPENDENCIES !== '1' }, async () => {
+    const stamp = process.env.PROBE_RUN_ID ?? Date.now().toString(36);
+    const shared = Buffer.from(`dependency artifact ${stamp}\n`);
+    const dependencyName = `CloudflareDependency_${stamp}`;
+    const dependentName = `CloudflareDependent_${stamp}`;
+    const items = [fixture(dependencyName, '1.10.0', shared),
+      reviseManifest(fixture(dependentName, '1.0.0', shared), manifest => {
+        manifest.dependencies = { [dependencyName]: '^1.2.0' };
+      }),
+      reviseManifest(fixture(`${dependentName}_Bad`, '1.0.0', shared), manifest => {
+        manifest.dependencies = { [dependencyName]: '^2.0.0' };
+      })];
+    for (const [index, item] of items.entries()) {
+      const started = await begin(item);
+      assert.equal(started.status, 200, JSON.stringify(started.json));
+      for (const object of started.json.objects) {
+        if (object.available) continue;
+        await upload(started.json.id, object.sha256,
+          object.sha256 === item.descriptor.source.sha256 ? item.source : shared);
+      }
+      const finalized = await call('POST', `/v2/publications/${started.json.id}/finalize`, '');
+      assert.equal(finalized.status, index === 2 ? 409 : 200, JSON.stringify(finalized.json));
+      if (index === 2) assert.equal(finalized.json.error, 'missing_dependency');
+    }
+    assert.equal((await call('GET', `/v2/packages/${dependentName}/versions/1.0.0`, undefined, false)).status, 200);
+    assert.equal((await call('GET', `/v2/packages/${dependentName}_Bad/versions/1.0.0`, undefined, false)).status, 404);
   });

@@ -21,6 +21,7 @@ const names = [
   `CloudflareProbe_${runId}`, `CloudflareProbe_${runId}_Other`, `CloudflareProbe_${runId}_Bad`,
   `CloudflareProbe_${runId}_Missing`, `CloudflareProbe_${runId}_Mismatch`, `CloudflareConcurrent_${runId}_A`,
   `CloudflareConcurrent_${runId}_B`, `CloudflareCli_${runId}`,
+  `CloudflareDependency_${runId}`, `CloudflareDependent_${runId}`, `CloudflareDependent_${runId}_Bad`,
   `CloudflareRace_${runId}`, `CloudflareRetention_${runId}`,
   ...['before_object', 'after_object', 'before_visibility', 'after_visibility']
     .map(point => `CloudflareFault_${runId}_${point}`),
