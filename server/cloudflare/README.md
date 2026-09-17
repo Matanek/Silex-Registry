@@ -36,5 +36,13 @@ produit d'abord un plan et un reçu, puis `--apply` supprime les seuls noms de c
 run. `PROBE_STORAGE=local` permet de répéter le nettoyage contre l'émulation.
 Le reçu persiste pour reprendre un nettoyage interrompu.
 
-La preuve durable dépend d'un test sur D1/R2 réels. Une réponse locale verte ne
-qualifie ni les limites de calcul, ni les quotas, ni les coûts Cloudflare.
+Le Worker de staging autorisé est sur
+`https://silex-registry-staging-probe.silex-lang.workers.dev`. Le CLI candidat
+refuse une origine de test HTTPS : `tests/edge-proxy.mjs` relaie seulement les
+requêtes de qualification depuis `127.0.0.1:8793` vers ce Worker. Démarrer ce
+relais avec `PROBE_UPSTREAM` fixé exactement à cette URL ; employer ensuite
+`PROBE_ORIGIN=http://127.0.0.1:8793` pour le test CLI. Le relais n'est pas un
+composant du registre et ne doit pas être utilisé comme origine produit.
+
+Une réponse locale ou un essai de staging vert ne qualifie ni les gros objets,
+ni les quotas, ni les coûts Cloudflare pour le registre complet.
