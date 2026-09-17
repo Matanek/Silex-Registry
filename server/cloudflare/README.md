@@ -68,3 +68,11 @@ les dépendances, les 171 objets par taille et SHA-256, et les archives source.
 Le lot préparé dans la Spec comporte 30 noms : `GFX.Nodes` a un propriétaire
 réservé mais aucune version importable. `GFX.Audio@0.4.0` reste explicitement
 absente faute de deux artefacts historiques.
+
+`admin/import-bundle.mjs BUNDLE PLAN OWNERS --local|--remote DATABASE BUCKET CONFIG`
+reprend ce contrôle avant tout transfert, vérifie les objets R2 déjà présents,
+place les objets manquants puis insère noms et versions avec `INSERT OR IGNORE`.
+Il refuse un nom, une version ou un objet préexistant divergent et vérifie les
+lignes D1 finales. Appliquer d'abord les migrations D1 sur la destination.
+`node tests/import-local.mjs` exerce deux imports d'un sous-lot historique dans
+un état Wrangler temporaire et vérifie le refus d'un objet altéré.
