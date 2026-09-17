@@ -23,6 +23,7 @@ const names = [
   `CloudflareConcurrent_${runId}_B`, `CloudflareCli_${runId}`,
   `CloudflareDependency_${runId}`, `CloudflareDependent_${runId}`, `CloudflareDependent_${runId}_Bad`,
   `CloudflareRace_${runId}`, `CloudflareRetention_${runId}`,
+  `CloudflareOrder_${runId}`,
   ...['before_object', 'after_object', 'before_visibility', 'after_visibility']
     .map(point => `CloudflareFault_${runId}_${point}`),
 ];

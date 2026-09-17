@@ -55,6 +55,7 @@ test('admit a valid descriptor and reject unsafe or colliding source paths', () 
 test('reject malformed requirements and dependency declarations before upload', () => {
   rejected(withManifest(fixture(), manifest => { manifest.version = '01.0.0'; }), 'invalid_identity');
   rejected(withManifest(fixture(), manifest => { manifest.requires.silex = '>=1.0.0 <0.44.0'; }), 'invalid_requirement');
+  rejected(withManifest(fixture(), manifest => { manifest.requires.silex = '>=0.44.0  <1.0.0'; }), 'invalid_requirement');
   rejected(withManifest(fixture(), manifest => { manifest.dependencies.Core = '~1.2.0'; }), 'invalid_dependency');
   rejected(withManifest(fixture(), manifest => { manifest.dependencies.AdmissionFixture = '=1.0.0'; }), 'invalid_dependency');
   rejected(withManifest(fixture(), manifest => { manifest.devDependencies = { Core: '=1.2.0' }; }), 'invalid_dependency');
@@ -72,6 +73,15 @@ test('resolve caret dependencies with numeric version order', () => {
   assert.equal(acceptsDependency('^1.2.0', '2.0.0'), false);
   assert.equal(acceptsDependency('=1.10.0', '1.10.0'), true);
   assert.equal(acceptsDependency('=1.10.0', '1.2.0'), false);
+});
+
+test('list published versions in descending numeric order', async () => {
+  const env = { DB: { prepare() { return { bind() { return this; },
+    async all() { return { results: ['1.2.0', '1.10.0', '2.0.0'].map(version => ({ version, digest: 'a'.repeat(64) })) }; },
+  }; } } };
+  const response = await workerFetch(new Request('https://registry.example/v2/packages/AdmissionFixture'), env);
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).versions.map(item => item.version), ['2.0.0', '1.10.0', '1.2.0']);
 });
 
 test('stop oversized streaming metadata and chunks before storing them', async () => {

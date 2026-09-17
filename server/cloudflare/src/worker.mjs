@@ -29,7 +29,7 @@ function exactKeys(value, keys) {
   return value && typeof value === 'object' && !Array.isArray(value) &&
     Object.keys(value).sort().join(',') === [...keys].sort().join(',');
 }
-function version(text) {
+function parseVersion(text) {
   const match = typeof text === 'string' ? versionPattern.exec(text) : null;
   if (!match || match.slice(1).some(part => part.length > 10 || Number(part) > 4294967295)) return null;
   return match.slice(1).map(Number);
@@ -67,14 +67,14 @@ function noPathCollision(paths) {
   }
 }
 function validateManifest(manifest) {
-  insist(validName(manifest?.name) && version(manifest?.version), 'invalid_identity');
+  insist(validName(manifest?.name) && parseVersion(manifest?.version), 'invalid_identity');
   if (manifest.repository !== undefined) insist(typeof manifest.repository === 'string' &&
     manifest.repository.length <= 200 && /^https:\/\/github\.com\/[A-Za-z0-9-]{1,39}\/[A-Za-z0-9_.-]{1,100}$/.test(manifest.repository) &&
     !['.', '..'].includes(manifest.repository.split('/').at(-1)), 'invalid_repository');
   insist(exactKeys(manifest.requires, ['silex']) && typeof manifest.requires.silex === 'string', 'invalid_requirement');
   const clauses = manifest.requires.silex.split(' ');
-  const minimum = clauses[0].startsWith('>=') ? version(clauses[0].slice(2)) : null;
-  const maximum = clauses.length === 2 && clauses[1].startsWith('<') ? version(clauses[1].slice(1)) : null;
+  const minimum = clauses[0].startsWith('>=') ? parseVersion(clauses[0].slice(2)) : null;
+  const maximum = clauses.length === 2 && clauses[1].startsWith('<') ? parseVersion(clauses[1].slice(1)) : null;
   insist(clauses.length <= 2 && minimum && (clauses.length === 1 || (maximum && compareVersions(maximum, minimum) > 0)),
     'invalid_requirement');
   if (manifest.sources !== undefined) insist(manifest.sources === '.' || safePath(manifest.sources), 'invalid_sources');
@@ -84,7 +84,7 @@ function validateManifest(manifest) {
     insist(dependencies && typeof dependencies === 'object' && !Array.isArray(dependencies), 'invalid_dependencies');
     for (const [name, constraint] of Object.entries(dependencies)) {
       insist(validName(name) && name !== manifest.name && typeof constraint === 'string' &&
-        ['=', '^'].includes(constraint[0]) && version(constraint.slice(1)) &&
+        ['=', '^'].includes(constraint[0]) && parseVersion(constraint.slice(1)) &&
         (key !== 'devDependencies' || !Object.hasOwn(manifest.dependencies ?? {}, name)), 'invalid_dependency');
     }
   }
@@ -103,8 +103,8 @@ function validatePaths(files, artifacts) {
   for (const target of targets) noPathCollision([...source, ...artifacts.filter(item => item.target === target).map(item => item.path)]);
 }
 export function acceptsDependency(constraint, candidate) {
-  const minimum = version(constraint.slice(1));
-  const found = version(candidate);
+  const minimum = parseVersion(constraint.slice(1));
+  const found = parseVersion(candidate);
   if (!minimum || !found) return false;
   return constraint[0] === '=' ? compareVersions(found, minimum) === 0 :
     constraint[0] === '^' && found[0] === minimum[0] && compareVersions(found, minimum) >= 0;
@@ -381,7 +381,8 @@ async function publicRead(request, env, name, version, target, artifact) {
   if (!version) {
     const rows = await env.DB.prepare('SELECT version,digest FROM probe_versions WHERE name=?').bind(name).all();
     insist(rows.results.length, 'package_not_found', 404);
-    return Response.json({ name, versions: rows.results.sort((a, b) => b.version.localeCompare(a.version)) },
+    return Response.json({ name, versions: rows.results.sort((a, b) =>
+      compareVersions(parseVersion(b.version), parseVersion(a.version))) },
       { headers: { 'content-encoding': 'identity', 'cache-control': 'no-transform' } });
   }
   const row = await env.DB.prepare('SELECT digest,descriptor FROM probe_versions WHERE name=? AND version=?').bind(name, version).first();

@@ -136,6 +136,26 @@ test('staging probe: hash, resume, immutable versions and shared artifact', { sk
   assert.equal((await call('GET', `/v2/packages/${name}_Unsafe`, undefined, false)).status, 404);
 });
 
+test('staging probe: public version listing follows numeric order',
+  { skip: !origin || process.env.PROBE_TEST_NUMERIC_LISTING !== '1' }, async () => {
+    const name = `CloudflareOrder_${process.env.PROBE_RUN_ID ?? Date.now().toString(36)}`;
+    const shared = Buffer.from(`numeric listing artifact ${name}\n`);
+    for (const version of ['1.2.0', '1.10.0', '2.0.0']) {
+      const item = fixture(name, version, shared);
+      const started = await begin(item);
+      assert.equal(started.status, 200, JSON.stringify(started.json));
+      await upload(started.json.id, item.descriptor.source.sha256, item.source, 0, 65536);
+      if (!started.json.objects.find(object => object.sha256 === sha(shared)).available) {
+        await upload(started.json.id, sha(shared), shared, 0, 65536);
+      }
+      const finalized = await call('POST', `/v2/publications/${started.json.id}/finalize`, '');
+      assert.equal(finalized.status, 200, JSON.stringify(finalized.json));
+    }
+    const listing = await call('GET', `/v2/packages/${name}`, undefined, false);
+    assert.equal(listing.status, 200, JSON.stringify(listing.json));
+    assert.deepEqual(listing.json.versions.map(item => item.version), ['2.0.0', '1.10.0', '1.2.0']);
+  });
+
 test('staging probe: interruption around R2 persistence and D1 visibility',
   { skip: !origin || process.env.PROBE_TEST_FAULTS !== '1' }, async () => {
     const stamp = process.env.PROBE_RUN_ID ?? Date.now().toString(36);
