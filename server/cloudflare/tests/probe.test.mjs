@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { archive } from './tar-fixture.mjs';
 
@@ -169,6 +170,28 @@ test('staging probe: native object larger than the original staging bound',
     const finalized = await call('POST', `/v2/publications/${started.json.id}/finalize`, '');
     assert.equal(finalized.status, 200, JSON.stringify(finalized.json));
     assert.equal(finalized.json.state, 'published');
+    const response = await fetch(`${origin}/v2/packages/${name}/versions/1.0.0/artifacts/macos-arm64/Shared`);
+    assert.equal(response.status, 200);
+    const actual = createHash('sha256');
+    let size = 0;
+    for await (const chunk of response.body) { actual.update(chunk); size += chunk.byteLength; }
+    assert.equal(size, artifact.length);
+    assert.equal(actual.digest('hex'), sha(artifact));
+  });
+
+test('staging probe: historical SDL object above thirty-two MiB',
+  { skip: !origin || !process.env.PROBE_HISTORICAL_ARTIFACT_FILE }, async () => {
+    const name = `CloudflareHistorical_${process.env.PROBE_RUN_ID ?? Date.now().toString(36)}`;
+    const artifact = await readFile(process.env.PROBE_HISTORICAL_ARTIFACT_FILE);
+    assert.equal(artifact.length, 51_047_580);
+    assert.equal(sha(artifact), '9c6a0ce402ed4232d644ac9966da5baad937773bb2765d41a4a068f9970618cd');
+    const item = fixture(name, '1.0.0', artifact);
+    const started = await begin(item);
+    assert.equal(started.status, 200, JSON.stringify(started.json));
+    await upload(started.json.id, item.descriptor.source.sha256, item.source, 0, 65536);
+    await upload(started.json.id, sha(artifact), artifact, 0, 65536);
+    const finalized = await call('POST', `/v2/publications/${started.json.id}/finalize`, '');
+    assert.equal(finalized.status, 200, JSON.stringify(finalized.json));
     const response = await fetch(`${origin}/v2/packages/${name}/versions/1.0.0/artifacts/macos-arm64/Shared`);
     assert.equal(response.status, 200);
     const actual = createHash('sha256');

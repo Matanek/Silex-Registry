@@ -26,6 +26,7 @@ const names = [
   `CloudflareOrder_${runId}`,
   `CloudflareLarge_${runId}`,
   `CloudflareLargeSource_${runId}`,
+  `CloudflareHistorical_${runId}`,
   ...['before_object', 'after_object', 'before_visibility', 'after_visibility']
     .map(point => `CloudflareFault_${runId}_${point}`),
 ];
