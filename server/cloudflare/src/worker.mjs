@@ -1,4 +1,5 @@
 import { loginFetch } from './login.mjs';
+import { inspectProvenance, ProvenanceFailure, verifyRepository } from './provenance.mjs';
 
 const encoder = new TextEncoder();
 const sha = /^[a-f0-9]{64}$/;
@@ -22,6 +23,10 @@ function canonical(value) {
   }
   insist(value !== undefined && !Number.isNaN(value) && (typeof value !== 'number' || Number.isSafeInteger(value)), 'invalid_descriptor');
   return JSON.stringify(value);
+}
+function exactKeys(value, keys) {
+  return value && typeof value === 'object' && !Array.isArray(value) &&
+    Object.keys(value).sort().join(',') === [...keys].sort().join(',');
 }
 function hex(bytes) { return Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, '0')).join(''); }
 async function digest(bytes) { return hex(await crypto.subtle.digest('SHA-256', bytes)); }
@@ -49,17 +54,21 @@ async function jsonBody(request) {
 }
 function descriptor(value) {
   insist(value && typeof value === 'object' && !Array.isArray(value) && value.schema === 1, 'unsupported_descriptor');
+  insist(exactKeys(value, value.provenance === undefined ?
+    ['artifacts', 'files', 'manifest', 'schema', 'source'] :
+    ['artifacts', 'files', 'manifest', 'provenance', 'schema', 'source']), 'invalid_descriptor');
+  inspectProvenance(value.provenance, false);
   insist(typeof value.manifest === 'string' && value.manifest.length <= maxMetadata, 'invalid_manifest');
   let manifest;
   try { manifest = JSON.parse(value.manifest); } catch { throw new Rejection(422, 'invalid_manifest'); }
   insist(namePattern.test(manifest?.name ?? '') && manifest.name.length <= 128 &&
     versionPattern.test(manifest?.version ?? ''), 'invalid_identity');
-  insist(value.source && sha.test(value.source.sha256 ?? '') && Number.isSafeInteger(value.source.size) &&
+  insist(exactKeys(value.source, ['sha256', 'size']) && sha.test(value.source.sha256 ?? '') && Number.isSafeInteger(value.source.size) &&
     value.source.size > 0 && value.source.size <= maxObject, 'invalid_source');
   insist(Array.isArray(value.files) && value.files.length > 0 && value.files.length <= 4096, 'invalid_files');
   const files = new Set();
   for (const file of value.files) {
-    insist(typeof file?.path === 'string' && file.path.length > 0 && file.path.length <= 512 &&
+    insist(exactKeys(file, ['path', 'sha256', 'size']) && typeof file.path === 'string' && file.path.length > 0 && file.path.length <= 512 &&
       !file.path.startsWith('/') && !file.path.split('/').some(part => !part || part === '.' || part === '..' || part.includes('\\')) &&
       sha.test(file.sha256 ?? '') && Number.isSafeInteger(file.size) && file.size >= 0, 'invalid_file');
     insist(!files.has(file.path.toLowerCase()), 'path_collision');
@@ -71,7 +80,7 @@ function descriptor(value) {
   insist(Array.isArray(value.artifacts) && value.artifacts.length <= 256, 'invalid_artifacts');
   const entries = new Set();
   for (const item of value.artifacts) {
-    insist(targets.has(item?.target) && namePattern.test(item?.name ?? '') &&
+    insist(exactKeys(item, ['name', 'path', 'sha256', 'size', 'target']) && targets.has(item.target) && namePattern.test(item.name ?? '') &&
       typeof item.path === 'string' && item.path.length > 0 && !item.path.startsWith('/') &&
       !item.path.split('/').some(part => !part || part === '.' || part === '..' || part.includes('\\')) &&
       sha.test(item.sha256 ?? '') && Number.isSafeInteger(item.size) && item.size > 0 && item.size <= maxObject,
@@ -91,16 +100,31 @@ function descriptor(value) {
 }
 async function authenticate(request, env) {
   const match = /^Bearer ([a-f0-9]{64})$/.exec(request.headers.get('authorization') ?? '');
-  insist(match && sha.test(env.STAGING_TOKEN_SHA256 ?? ''), 'unauthorized', 401);
+  insist(match, 'unauthorized', 401);
   const credential = await digest(encoder.encode(match[1]));
-  insist(credential === env.STAGING_TOKEN_SHA256, 'unauthorized', 401);
-  return credential;
+  if (sha.test(env.STAGING_TOKEN_SHA256 ?? '') && credential === env.STAGING_TOKEN_SHA256) return '__probe__';
+  const row = await env.DB.prepare('SELECT github_id FROM probe_credentials WHERE digest=? AND revoked=0 AND expires_at>?')
+    .bind(credential, Math.floor(Date.now() / 1000)).first();
+  insist(row, 'unauthorized', 401);
+  return row.github_id;
 }
-async function session(env, id, credential) {
+async function session(env, id, githubId) {
   const row = await env.DB.prepare('SELECT * FROM probe_sessions WHERE id=?').bind(id).first();
   insist(row, 'publication_not_found', 404);
-  insist(row.credential === credential, 'forbidden', 403);
+  insist(row.credential === githubId, 'forbidden', 403);
   return row;
+}
+async function owner(env, name, githubId) {
+  const current = await env.DB.prepare('SELECT name,github_id FROM probe_names WHERE name=?').bind(name).first();
+  insist(!current || (current.name === name && current.github_id === githubId), 'name_unavailable', 403);
+  const components = name.split('.');
+  components.pop();
+  while (components.length) {
+    const parent = components.join('.');
+    const registered = await env.DB.prepare('SELECT name,github_id FROM probe_names WHERE name=?').bind(parent).first();
+    insist(registered?.name === parent && registered.github_id === githubId, 'namespace_unavailable', 403);
+    components.pop();
+  }
 }
 async function parts(env, id, object) {
   const result = await env.DB.prepare('SELECT offset,size,chunk_digest FROM probe_chunks WHERE session_id=? AND object_digest=? ORDER BY offset').bind(id, object).all();
@@ -128,9 +152,12 @@ async function status(env, row) {
   return { id: row.id, state: version?.digest === row.digest ? 'published' : 'receiving', publication_sha256: row.digest,
     objects: listed.sort((a, b) => a.sha256.localeCompare(b.sha256)) };
 }
-async function create(request, env, credential) {
+async function create(request, env, githubId, verify) {
   const value = await jsonBody(request);
   const { manifest } = descriptor(value);
+  const provenance = inspectProvenance(value.provenance, githubId !== '__probe__');
+  if (githubId !== '__probe__') await verify(provenance, githubId);
+  await owner(env, manifest.name, githubId);
   const manifestHash = await digest(encoder.encode(value.manifest));
   const manifestFile = value.files.find(file => file.path === 'Package.json');
   insist(manifestFile.size === encoder.encode(value.manifest).byteLength && manifestFile.sha256 === manifestHash, 'manifest_mismatch');
@@ -140,8 +167,8 @@ async function create(request, env, credential) {
   insist(!existing || existing.digest === publication, 'version_conflict', 409);
   const id = hex(crypto.getRandomValues(new Uint8Array(16)));
   await env.DB.prepare('INSERT OR IGNORE INTO probe_sessions VALUES (?,?,?,?,?,?,?)')
-    .bind(id, credential, publication, manifest.name, manifest.version, normalized, Date.now()).run();
-  const row = await env.DB.prepare('SELECT * FROM probe_sessions WHERE credential=? AND digest=?').bind(credential, publication).first();
+    .bind(id, githubId, publication, manifest.name, manifest.version, normalized, Date.now()).run();
+  const row = await env.DB.prepare('SELECT * FROM probe_sessions WHERE credential=? AND digest=?').bind(githubId, publication).first();
   return status(env, row);
 }
 async function append(request, env, row, object, offset) {
@@ -210,9 +237,12 @@ async function persistObject(request, env, row, object, size) {
   insist(objectValid(await env.OBJECTS.head(key(object)), size, object), 'object_store_unavailable', 503);
   probeFault(request, env, 'after_object');
 }
-async function finalize(request, env, row) {
+async function finalize(request, env, row, verify) {
   const value = JSON.parse(row.descriptor);
   const { objects, manifest } = descriptor(value);
+  const provenance = inspectProvenance(value.provenance, row.credential !== '__probe__');
+  if (row.credential !== '__probe__') await verify(provenance, row.credential);
+  await owner(env, row.name, row.credential);
   const existing = await env.DB.prepare('SELECT digest FROM probe_versions WHERE name=? AND version=?').bind(row.name, row.version).first();
   insist(!existing || existing.digest === row.digest, 'version_conflict', 409);
   if (!existing) {
@@ -226,10 +256,14 @@ async function finalize(request, env, row) {
     }
     probeFault(request, env, 'before_visibility');
     // The single row is the public visibility boundary. R2 has already confirmed every object.
-    await env.DB.prepare('INSERT OR IGNORE INTO probe_versions VALUES (?,?,?,?)')
-      .bind(row.name, row.version, row.digest, row.descriptor).run();
+    await env.DB.batch([
+      env.DB.prepare('INSERT OR IGNORE INTO probe_names(name,github_id) VALUES (?,?)').bind(row.name, row.credential),
+      env.DB.prepare('INSERT OR IGNORE INTO probe_versions(name,version,digest,descriptor) SELECT ?,?,?,? WHERE EXISTS (SELECT 1 FROM probe_names WHERE name=? AND github_id=?)')
+        .bind(row.name, row.version, row.digest, row.descriptor, row.name, row.credential),
+    ]);
     probeFault(request, env, 'after_visibility');
   }
+  await owner(env, row.name, row.credential);
   const winner = await env.DB.prepare('SELECT digest FROM probe_versions WHERE name=? AND version=?').bind(row.name, row.version).first();
   insist(winner?.digest === row.digest, 'version_conflict', 409);
   return status(env, row);
@@ -256,8 +290,7 @@ async function publicRead(request, env, name, version, target, artifact) {
     'content-encoding': 'identity', 'cache-control': 'no-transform', etag: `"${blob.sha256}"`,
   } });
 }
-export default {
-  async fetch(request, env) {
+export async function workerFetch(request, env, verify = verifyRepository) {
     try {
       const url = new URL(request.url);
       insist(!url.search && !url.hash && !url.pathname.includes('%') && url.pathname.length <= 512, 'invalid_route', 400);
@@ -270,14 +303,14 @@ export default {
           uploads: await inventory(env, 'probe/uploads/') });
       }
       if (route === '/v2/publications' && request.method === 'POST') {
-        return Response.json(await create(request, env, await authenticate(request, env)));
+        return Response.json(await create(request, env, await authenticate(request, env), verify));
       }
       let match = /^\/v2\/publications\/([a-f0-9]{32})(?:\/(finalize|objects\/([a-f0-9]{64})))?$/.exec(route);
       if (match) {
         const credential = await authenticate(request, env);
         const row = await session(env, match[1], credential);
         if (!match[2] && request.method === 'GET') return Response.json(await status(env, row));
-        if (match[2] === 'finalize' && request.method === 'POST') return Response.json(await finalize(request, env, row));
+        if (match[2] === 'finalize' && request.method === 'POST') return Response.json(await finalize(request, env, row, verify));
         if (match[3] && request.method === 'PATCH') {
           const offset = Number(request.headers.get('upload-offset'));
           insist(Number.isSafeInteger(offset) && offset >= 0, 'invalid_offset', 400);
@@ -297,10 +330,10 @@ export default {
       }
       throw new Rejection(404, 'route_not_found');
     } catch (error) {
-      const status = error instanceof Rejection ? error.status : 503;
-      const code = error instanceof Rejection ? error.code : 'storage_unavailable';
+      const status = error instanceof Rejection || error instanceof ProvenanceFailure ? error.status : 503;
+      const code = error instanceof Rejection || error instanceof ProvenanceFailure ? error.code : 'storage_unavailable';
       return Response.json({ error: code, message: code.replaceAll('_', ' '), retryable: [429, 503, 507].includes(status) },
         { status, headers: { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
     }
-  },
-};
+}
+export default { fetch(request, env) { return workerFetch(request, env); } };

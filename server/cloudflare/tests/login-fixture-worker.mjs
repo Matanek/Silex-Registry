@@ -1,4 +1,5 @@
 import { loginFetch } from '../src/login.mjs';
+import { workerFetch } from '../src/worker.mjs';
 
 let mode = 'authorized';
 let polls = 0;
@@ -11,6 +12,7 @@ const github = {
     if (mode === 'pending' && polls === 1) return { state: 'pending' };
     if (mode === 'denied') return { state: 'denied' };
     if (mode === 'slow_down' && polls === 1) return { state: 'slow_down', interval: 6 };
+    if (mode === 'other') return { state: 'authorized', github_id: '987654321', login: 'other-user' };
     return { state: 'authorized', github_id: '123456789', login: 'fixture-user' };
   },
 };
@@ -29,6 +31,6 @@ export default {
       return Response.json({ expired: true });
     }
     const response = await loginFetch(request, env, url.pathname, github);
-    return response ?? new Response(null, { status: 404 });
+    return response ?? workerFetch(request, env, async () => {});
   },
 };

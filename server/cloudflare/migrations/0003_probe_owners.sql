@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS probe_names (
+  name TEXT PRIMARY KEY COLLATE NOCASE,
+  github_id TEXT NOT NULL
+);
