@@ -12,13 +12,16 @@ installer les versions stockées sur Cloudflare.
 
 ## Préparer et qualifier une destination
 
-1. Créer Worker, base D1 et bucket R2 dédiés. Remplacer les noms et identifiants
-   de `wrangler.toml` ; ne jamais restaurer dans le staging ou dans un service
-   actif. Appliquer les trois migrations D1 à la base vide.
-2. Poser `LOGIN_KEY_B64` et un jeton de maintenance distinct via les secrets
-   Wrangler, hors de Git et des copies. Ne pas configurer le jeton de banc
-   `STAGING_TOKEN_SHA256` en production. Les routes `__probe` ne doivent pas
-   être activées sur le service public définitif.
+1. Créer Worker, base D1 et bucket R2 dédiés. Copier
+   `wrangler.production.example.toml`, renseigner les identifiants et choisir
+   le routage public seulement au moment autorisé. Ne jamais restaurer dans
+   le staging ou dans un service actif. Appliquer les trois migrations D1 à
+   la base vide.
+2. Poser `LOGIN_KEY_B64` et `MAINTENANCE_TOKEN_SHA256` via les secrets Wrangler,
+   hors de Git et des copies. Le second est le SHA-256 d'un jeton aléatoire de
+   64 chiffres hexadécimaux ; seul l'administrateur possède le jeton brut
+   `REGISTRY_MAINTENANCE_TOKEN`. Ne pas configurer `STAGING_TOKEN_SHA256` en
+   production : les routes `__probe` doivent y rester inaccessibles.
 3. Exécuter `admin/validate-bundle.mjs`, puis `admin/import-bundle.mjs` avec
    l'origine et le jeton administratifs de cette destination. Rejouer l'import :
    zéro version supplémentaire doit apparaître. Toute collision différente

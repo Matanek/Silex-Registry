@@ -1,0 +1,20 @@
+# Copier et renseigner les ressources dédiées avant toute mise en service.
+# Ce modèle ne configure aucun domaine et ne porte aucun secret ni jeton de banc.
+name = "silex-registry"
+main = "src/worker.mjs"
+compatibility_date = "2026-09-17"
+workers_dev = false
+account_id = "REPLACE_WITH_ACCOUNT_ID"
+
+[vars]
+GITHUB_CLIENT_ID = "Ov23liijZ3iMXfwe7qnz"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "silex-registry"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "OBJECTS"
+bucket_name = "silex-registry"
