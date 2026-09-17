@@ -15,9 +15,14 @@ const q = value => `'${String(value).replaceAll("'", "''")}'`;
 
 export async function importBundle({ bundle, plan, owners, database, bucket, config, storage, persistTo,
   progress = console.log }) {
+  const checked = await validateBundle(bundle, plan, owners);
+  return importValidatedStore({ checked, database, bucket, config, storage, persistTo, progress });
+}
+
+export async function importValidatedStore({ checked, database, bucket, config, storage, persistTo,
+  requireEmpty = false, progress = console.log }) {
   if (!['local', 'remote'].includes(storage) || !/^[A-Za-z0-9_-]+$/.test(database) ||
     !/^[A-Za-z0-9_-]+$/.test(bucket)) throw new Error('invalid destination');
-  const checked = await validateBundle(bundle, plan, owners);
   const flags = [`--${storage}`, '--config', resolve(config),
     ...(persistTo && storage === 'local' ? ['--persist-to', resolve(persistTo)] : [])];
   async function command(args) {
@@ -33,6 +38,7 @@ export async function importBundle({ bundle, plan, owners, database, bucket, con
     [row.name.toLowerCase(), row]));
   const currentVersions = new Map((await query('SELECT name,version,digest,descriptor FROM probe_versions')).map(row =>
     [`${row.name.toLowerCase()}@${row.version}`, row]));
+  if (requireEmpty && (currentOwners.size || currentVersions.size)) throw new Error('destination is not empty');
   for (const owner of checked.owners.values()) {
     const existing = currentOwners.get(owner.name.toLowerCase());
     if (existing && (existing.name !== owner.name || existing.github_id !== owner.github_id))

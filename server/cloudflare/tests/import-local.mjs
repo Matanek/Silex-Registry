@@ -6,6 +6,8 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { importBundle } from '../admin/import-bundle.mjs';
+import { exportStore } from '../admin/export-store.mjs';
+import { restoreBackup } from '../admin/restore-backup.mjs';
 
 const execute = promisify(execFile);
 const cloudflare = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -32,6 +34,20 @@ try {
   assert.equal(first.insertedVersions, 1);
   const second = await importBundle(options);
   assert.equal(second.insertedVersions, 0);
+  const backup = join(scratch, 'backup');
+  const exported = await exportStore({ database: options.database, bucket: options.bucket, config,
+    storage: 'local', persistTo, destination: backup, progress() {} });
+  assert.deepEqual([exported.names, exported.versions, exported.objects], [30, 1, 1]);
+  const saved = JSON.parse(await readFile(join(backup, 'metadata.json'), 'utf8'));
+  assert.deepEqual([saved.owners.length, saved.versions.length, saved.objects.length], [30, 1, 1]);
+  const restoredState = join(scratch, 'restored-state');
+  await execute(wrangler, ['d1', 'migrations', 'apply', 'silex-registry-staging', '--local',
+    '--config', config, '--persist-to', restoredState], { cwd: cloudflare });
+  const restored = await restoreBackup({ backup, database: options.database, bucket: options.bucket,
+    config, storage: 'local', persistTo: restoredState, progress() {} });
+  assert.deepEqual([restored.names, restored.versions, restored.objects], [30, 1, 1]);
+  await assert.rejects(restoreBackup({ backup, database: options.database, bucket: options.bucket,
+    config, storage: 'local', persistTo: restoredState, progress() {} }), /destination is not empty/);
   const { descriptor } = JSON.parse(await readFile(join(bundle, 'STD@0.16.0.json'), 'utf8'));
   const objectPath = `silex-registry-staging/probe/objects/sha256/${descriptor.source.sha256}`;
   const corrupt = join(scratch, 'corrupt');
@@ -46,5 +62,5 @@ try {
   const rows = JSON.parse(stdout)[0].results;
   assert.deepEqual([rows[0].names, rows[0].versions], [30, 1]);
   console.log(JSON.stringify({ localImport: 'passed', names: 30, versions: 1,
-    attempts: 2, corruptedObjectRejected: true }));
+    attempts: 2, backupVerified: true, restoredToEmptyState: true, corruptedObjectRejected: true }));
 } finally { await rm(scratch, { recursive: true, force: true }); }

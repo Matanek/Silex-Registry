@@ -76,3 +76,16 @@ Il refuse un nom, une version ou un objet préexistant divergent et vérifie les
 lignes D1 finales. Appliquer d'abord les migrations D1 sur la destination.
 `node tests/import-local.mjs` exerce deux imports d'un sous-lot historique dans
 un état Wrangler temporaire et vérifie le refus d'un objet altéré.
+
+`admin/export-store.mjs --local|--remote DATABASE BUCKET CONFIG DESTINATION`
+copie les lignes publiques D1 et chaque objet R2 référencé vers un nouveau
+dossier. Chaque taille, SHA-256 et archive source est vérifié ; l'export échoue
+si les métadonnées D1 changent entre le début et la fin. La copie n'inclut ni
+jeton, ni clé de connexion, ni session d'upload. La destination prévue pour les
+copies réelles est `SilexProject/Backups/Silex-Registry`.
+
+`admin/restore-backup.mjs BACKUP --local|--remote DATABASE BUCKET CONFIG`
+revérifie la copie puis restaure vers une base D1 vide. Employer une base et un
+bucket R2 distincts du service source. Le test local restaure la copie dans un
+second état Wrangler isolé et refuse une nouvelle restauration vers cet état
+déjà rempli.
