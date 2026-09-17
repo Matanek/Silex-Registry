@@ -27,8 +27,8 @@ test('admit the exact source snapshot and reject descriptor or archive substitut
 });
 
 test('admit a source snapshot above the former expanded staging bound', async () => {
-  const largeModule = Buffer.alloc(36_806_264, 0x53);
+  const modules = Array.from({ length: 4 }, (_, index) => [`Module/Part${index}.sx`, Buffer.alloc(9_201_566, 0x53)]);
   const item = { manifest, files: [files[0],
-    { path: 'Module/Value.sx', size: largeModule.length, sha256: await digest(largeModule) }] };
-  await verifySourceArchive(archive([['Package.json', manifest], ['Module/Value.sx', largeModule]]), item, digest);
+    ...await Promise.all(modules.map(async ([path, bytes]) => ({ path, size: bytes.length, sha256: await digest(bytes) })))] };
+  await verifySourceArchive(archive([['Package.json', manifest], ...modules]), item, digest);
 });

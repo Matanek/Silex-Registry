@@ -19,11 +19,11 @@ async function call(method, path, body, authorized = true, offset, fault) {
   try { json = JSON.parse(bytes.toString()); } catch { json = null; }
   return { status: response.status, json, bytes };
 }
-function fixture(name, version, shared, suffix = '', moduleBytes) {
+function fixture(name, version, shared, suffix = '') {
   const sharedDigest = sha(shared);
   const manifest = JSON.stringify({ name, version, requires: { silex: '>=0.44.0' },
     artifacts: { 'macos-arm64': { Shared: { path: 'Boundary/macos-arm64/libShared.a', sha256: sharedDigest } } } });
-  const module = moduleBytes ?? Buffer.from(`public func answer() int { return 42 } // ${suffix}\n`);
+  const module = Buffer.from(`public func answer() int { return 42 } // ${suffix}\n`);
   const source = archive([['Package.json', manifest], ['Module/Value.sx', module]]);
   return { source, module, descriptor: { schema: 1, manifest,
     source: { size: source.length, sha256: sha(source) },
@@ -190,7 +190,15 @@ test('staging probe: source snapshot larger than the original expanded bound',
       }
     }
     const shared = Buffer.from(`large source artifact ${name}\n`);
-    const item = fixture(name, '1.0.0', shared, '', module);
+    const item = fixture(name, '1.0.0', shared);
+    const sourceFiles = Array.from({ length: 4 }, (_, index) => {
+      const bytes = module.subarray(index * 9_201_566, (index + 1) * 9_201_566);
+      return [`Module/Part${index}.sx`, bytes];
+    });
+    item.descriptor.files = [item.descriptor.files[0],
+      ...sourceFiles.map(([path, bytes]) => ({ path, size: bytes.length, sha256: sha(bytes) }))];
+    item.source = archive([['Package.json', item.descriptor.manifest], ...sourceFiles]);
+    item.descriptor.source = { size: item.source.length, sha256: sha(item.source) };
     assert.ok(item.source.length > 8 * 1024 * 1024 && item.source.length < 32 * 1024 * 1024);
     const started = await begin(item);
     assert.equal(started.status, 200, JSON.stringify(started.json));
