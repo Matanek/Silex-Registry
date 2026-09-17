@@ -47,24 +47,27 @@ function referenced(row) {
 async function snapshot() {
   const allSessions = await query('SELECT id,name,descriptor FROM probe_sessions');
   const allVersions = await query('SELECT name,version,descriptor FROM probe_versions');
+  const allOwners = await query('SELECT name,github_id FROM probe_names');
   const sessions = allSessions.filter(row => names.includes(row.name));
   const versions = allVersions.filter(row => names.includes(row.name));
+  const owners = allOwners.filter(row => names.includes(row.name));
   const otherReferences = new Set([...allSessions.filter(row => !names.includes(row.name)),
     ...allVersions.filter(row => !names.includes(row.name))].flatMap(referenced));
-  return { sessions, versions, otherReferences };
+  return { sessions, versions, owners, otherReferences };
 }
 let plan;
 try { plan = JSON.parse(await readFile(receipt, 'utf8')); }
 catch (error) { if (error.code !== 'ENOENT') throw error; }
 if (!plan) {
-  const { sessions, versions, otherReferences } = await snapshot();
+  const { sessions, versions, owners, otherReferences } = await snapshot();
   const candidates = new Set([...sessions, ...versions].flatMap(referenced));
   const sessionIds = new Set(sessions.map(row => row.id));
   const listing = await inventory();
   const objectKeys = listing.objects.filter(item => candidates.has(item.key.replace('probe/objects/sha256/', '')) &&
     !otherReferences.has(item.key.replace('probe/objects/sha256/', ''))).map(item => item.key);
   const uploadKeys = listing.uploads.filter(item => [...sessionIds].some(id => item.key.startsWith(`probe/uploads/${id}/`))).map(item => item.key);
-  plan = { runId, origin, storage, names: versions.map(row => `${row.name}@${row.version}`), sessions: [...sessionIds],
+  plan = { runId, origin, storage, names: versions.map(row => `${row.name}@${row.version}`),
+    owners: owners.map(row => ({ name: row.name, github_id: row.github_id })), sessions: [...sessionIds],
     objectKeys, uploadKeys, retainedSharedDigests: [...candidates].filter(sha => otherReferences.has(sha)), applied: false };
   await writeFile(receipt, JSON.stringify(plan, null, 2));
 }
@@ -75,12 +78,14 @@ assert.equal(plan.applied, false, 'cleanup already applied');
 for (const key of plan.objectKeys) assert.match(key, /^probe\/objects\/sha256\/[a-f0-9]{64}$/);
 for (const key of plan.uploadKeys) assert.ok(plan.sessions.some(id => key.startsWith(`probe/uploads/${id}/`)));
 console.log(JSON.stringify({ phase: apply ? 'applying' : 'planned', receipt, versions: plan.names.length,
+  owners: plan.owners.length,
   sessions: plan.sessions.length, canonicalObjects: plan.objectKeys.length, uploadChunks: plan.uploadKeys.length }));
 if (!apply) process.exit(0);
 
-const { sessions, versions, otherReferences } = await snapshot();
+const { sessions, versions, owners, otherReferences } = await snapshot();
 assert.deepEqual(sessions.map(row => row.id).sort(), [...plan.sessions].sort(), 'run sessions changed after planning');
 assert.deepEqual(versions.map(row => `${row.name}@${row.version}`).sort(), [...plan.names].sort(), 'run versions changed after planning');
+assert.deepEqual(owners, plan.owners, 'run ownership changed after planning');
 const objectKeys = plan.objectKeys.filter(key => !otherReferences.has(key.slice('probe/objects/sha256/'.length)));
 const uploadKeys = plan.uploadKeys;
 await query(`DELETE FROM probe_versions WHERE name IN (${quoted})`);
@@ -89,14 +94,17 @@ if (sessions.length) {
   await query(`DELETE FROM probe_chunks WHERE session_id IN (${ids})`);
   await query(`DELETE FROM probe_sessions WHERE id IN (${ids})`);
 }
+await query(`DELETE FROM probe_names WHERE name IN (${quoted})`);
 for (const key of [...uploadKeys, ...objectKeys]) {
   await execute('./node_modules/.bin/wrangler', ['r2', 'object', 'delete', `silex-registry-staging/${key}`,
     `--${storage}`, '--force'], { maxBuffer: 1024 * 1024 });
 }
 const remainingSessions = await query(`SELECT id FROM probe_sessions WHERE name IN (${quoted})`);
 const remainingVersions = await query(`SELECT name FROM probe_versions WHERE name IN (${quoted})`);
+const remainingOwners = await query(`SELECT name FROM probe_names WHERE name IN (${quoted})`);
 assert.equal(remainingSessions.length, 0);
 assert.equal(remainingVersions.length, 0);
+assert.equal(remainingOwners.length, 0);
 const after = await inventory();
 for (const key of [...uploadKeys, ...objectKeys]) {
   assert.ok(![...after.uploads, ...after.objects].some(item => item.key === key), `remaining R2 object ${key}`);
@@ -105,4 +113,5 @@ await writeFile(receipt, JSON.stringify({ ...plan, applied: true,
   retainedSharedDigests: [...new Set([...plan.retainedSharedDigests,
     ...plan.objectKeys.filter(key => !objectKeys.includes(key)).map(key => key.slice('probe/objects/sha256/'.length))])] }, null, 2));
 console.log(JSON.stringify({ phase: 'cleaned', receipt, versions: plan.names.length,
+  owners: plan.owners.length,
   sessions: plan.sessions.length, canonicalObjects: objectKeys.length, uploadChunks: uploadKeys.length }));
