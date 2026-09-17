@@ -67,6 +67,22 @@ test('reject malformed requirements and dependency declarations before upload', 
   rejected(withManifest(fixture(), manifest => { manifest.repository = 'https://example.com/Silex-Test/Fixture'; }), 'invalid_repository');
 });
 
+test('admit supported editorial metadata and reject manifests that Silex cannot install', () => {
+  descriptor(withManifest(fixture(), manifest => {
+    manifest.description = { en: 'An admission fixture', fr: 'Une fixture' };
+    manifest.authors = ['Ada', 'Lin'];
+    manifest.extensions = { 'AdmissionFixture.Plugin': { friend: true, suite: true } };
+    manifest.catalogs = ['AdmissionFixture', 'AdmissionFixture.Components'];
+  }));
+  rejected(withManifest(fixture(), manifest => { manifest.unknown = true; }), 'invalid_manifest');
+  rejected(withManifest(fixture(), manifest => { manifest.friends = []; }), 'invalid_friends');
+  rejected(withManifest(fixture(), manifest => { manifest.description = { fr: 'Sans anglais' }; }), 'invalid_description');
+  rejected(withManifest(fixture(), manifest => { manifest.description = { en: 'English', EN: 'Duplicate' }; }), 'invalid_description');
+  rejected(withManifest(fixture(), manifest => { manifest.authors = ['Ada', 'Ada']; }), 'invalid_authors');
+  rejected(withManifest(fixture(), manifest => { manifest.extensions = { 'AdmissionFixture.*': { suite: true } }; }), 'invalid_extensions');
+  rejected(withManifest(fixture(), manifest => { manifest.catalogs = ['Another.Components']; }), 'invalid_catalogs');
+});
+
 test('resolve caret dependencies with numeric version order', () => {
   assert.equal(acceptsDependency('^1.2.0', '1.10.0'), true);
   assert.equal(acceptsDependency('^1.2.0', '1.1.9'), false);

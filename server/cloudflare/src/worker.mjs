@@ -42,6 +42,7 @@ function validName(name) {
   return typeof name === 'string' && name.length <= 128 && namePattern.test(name) &&
     !['Package', 'Module'].includes(name.split('.')[0]);
 }
+function validModuleName(name) { return typeof name === 'string' && namePattern.test(name); }
 function safePath(path) {
   if (typeof path !== 'string' || !path || encoder.encode(path).byteLength > 240 || path.normalize('NFC') !== path ||
     /[\x00-\x1f\x7f\\:<>"|?*]/u.test(path)) return false;
@@ -66,8 +67,59 @@ function noPathCollision(paths) {
     }
   }
 }
+function metadataLine(value) {
+  return typeof value === 'string' && value.length > 0 &&
+    !/^[ \t\r\n]|[ \t\r\n]$|[\r\n]/.test(value);
+}
+function validateEditorialMetadata(manifest) {
+  if (manifest.description !== undefined) {
+    const description = manifest.description;
+    if (typeof description === 'string') insist(metadataLine(description), 'invalid_description');
+    else {
+      insist(description && typeof description === 'object' && !Array.isArray(description) &&
+        Object.keys(description).length > 0, 'invalid_description');
+      const languages = new Set();
+      for (const [language, text] of Object.entries(description)) {
+        const folded = language.toLowerCase();
+        insist(language.length <= 35 && /^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/.test(language) &&
+          !languages.has(folded) && metadataLine(text), 'invalid_description');
+        languages.add(folded);
+      }
+      insist(languages.has('en'), 'invalid_description');
+    }
+  }
+  if (manifest.authors !== undefined) {
+    insist(Array.isArray(manifest.authors) && manifest.authors.length > 0 &&
+      manifest.authors.every(metadataLine) && new Set(manifest.authors).size === manifest.authors.length,
+    'invalid_authors');
+  }
+  if (manifest.extensions !== undefined) {
+    const grants = manifest.extensions;
+    insist((Array.isArray(grants) && grants.length === 0) ||
+      (grants && typeof grants === 'object' && !Array.isArray(grants)), 'invalid_extensions');
+    for (const [grant, permissions] of Object.entries(grants)) {
+      const child = grant.startsWith(`${manifest.name}.`) ? grant.slice(manifest.name.length + 1) : '';
+      insist(child === '*' || (validModuleName(child) && !child.includes('.')), 'invalid_extensions');
+      insist(permissions && typeof permissions === 'object' && !Array.isArray(permissions) &&
+        Object.entries(permissions).every(([key, enabled]) =>
+          ['friend', 'suite', 'merge'].includes(key) && typeof enabled === 'boolean'), 'invalid_extensions');
+      insist(child !== '*' || (!permissions.suite && !permissions.merge), 'invalid_extensions');
+    }
+  }
+  if (manifest.catalogs !== undefined) {
+    insist(Array.isArray(manifest.catalogs) && manifest.catalogs.every(catalog =>
+      validModuleName(catalog) && (catalog === manifest.name || catalog.startsWith(`${manifest.name}.`))) &&
+      new Set(manifest.catalogs).size === manifest.catalogs.length, 'invalid_catalogs');
+  }
+}
 function validateManifest(manifest) {
+  const fields = new Set(['name', 'version', 'repository', 'sources', 'description', 'authors', 'extensions',
+    'friends', 'catalogs', 'requires', 'dependencies', 'devDependencies', 'boundary', 'artifacts']);
+  insist(manifest && typeof manifest === 'object' && !Array.isArray(manifest) &&
+    Object.keys(manifest).every(field => fields.has(field)), 'invalid_manifest');
+  insist(manifest.friends === undefined, 'invalid_friends');
   insist(validName(manifest?.name) && parseVersion(manifest?.version), 'invalid_identity');
+  validateEditorialMetadata(manifest);
   if (manifest.repository !== undefined) insist(typeof manifest.repository === 'string' &&
     manifest.repository.length <= 200 && /^https:\/\/github\.com\/[A-Za-z0-9-]{1,39}\/[A-Za-z0-9_.-]{1,100}$/.test(manifest.repository) &&
     !['.', '..'].includes(manifest.repository.split('/').at(-1)), 'invalid_repository');
