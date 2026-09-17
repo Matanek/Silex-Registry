@@ -9,7 +9,7 @@ const versionPattern = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
 const targets = new Set(['macos-arm64', 'macos-x64', 'linux-arm64', 'linux-x64', 'windows-arm64', 'windows-x64']);
 const maxMetadata = 262144;
 const maxChunk = 65536;
-const maxObject = 8 * 1024 * 1024; // Task-09 probe bound; production limits are not established.
+const maxObject = 32 * 1024 * 1024; // Bounded staging candidate; production limits are not established.
 
 class Rejection extends Error {
   constructor(status, code) { super(code); this.status = status; this.code = code; }
@@ -422,17 +422,10 @@ async function persistObject(request, env, row, object, size) {
     const stored = await env.OBJECTS.put(key(object), stream.readable, { onlyIf: { etagDoesNotMatch: '*' }, sha256: object });
     if (!stored) await writer.abort().catch(() => {});
     await producer.catch(error => { if (stored) throw error; });
-  } catch {
+  } catch (error) {
     await writer.abort().catch(() => {});
     await producer.catch(() => {});
-    // Re-read only on failure: distinguish untrusted bytes from a transient R2 failure.
-    const bytes = new Uint8Array(size);
-    for (const part of rows) {
-      const value = await env.OBJECTS.get(chunkKey(row.id, object, part.offset, part.chunk_digest));
-      insist(objectValid(value, part.size, part.chunk_digest), 'missing_chunk', 503);
-      bytes.set(new Uint8Array(await value.arrayBuffer()), part.offset);
-    }
-    insist(await digest(bytes) === object, 'digest_mismatch');
+    if (/\(10037\)$/.test(String(error?.message ?? ''))) throw new Rejection(422, 'digest_mismatch');
     throw new Rejection(503, 'object_store_unavailable');
   }
   insist(objectValid(await env.OBJECTS.head(key(object)), size, object), 'object_store_unavailable', 503);

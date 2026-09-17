@@ -156,6 +156,28 @@ test('staging probe: public version listing follows numeric order',
     assert.deepEqual(listing.json.versions.map(item => item.version), ['2.0.0', '1.10.0', '1.2.0']);
   });
 
+test('staging probe: native object larger than the original staging bound',
+  { skip: !origin || process.env.PROBE_TEST_LARGE_OBJECT !== '1' }, async () => {
+    const name = `CloudflareLarge_${process.env.PROBE_RUN_ID ?? Date.now().toString(36)}`;
+    const artifact = Buffer.alloc(22995244, 0x53);
+    artifact.write(name);
+    const item = fixture(name, '1.0.0', artifact);
+    const started = await begin(item);
+    assert.equal(started.status, 200, JSON.stringify(started.json));
+    await upload(started.json.id, item.descriptor.source.sha256, item.source, 0, 65536);
+    await upload(started.json.id, sha(artifact), artifact, 0, 65536);
+    const finalized = await call('POST', `/v2/publications/${started.json.id}/finalize`, '');
+    assert.equal(finalized.status, 200, JSON.stringify(finalized.json));
+    assert.equal(finalized.json.state, 'published');
+    const response = await fetch(`${origin}/v2/packages/${name}/versions/1.0.0/artifacts/macos-arm64/Shared`);
+    assert.equal(response.status, 200);
+    const actual = createHash('sha256');
+    let size = 0;
+    for await (const chunk of response.body) { actual.update(chunk); size += chunk.byteLength; }
+    assert.equal(size, artifact.length);
+    assert.equal(actual.digest('hex'), sha(artifact));
+  });
+
 test('staging probe: interruption around R2 persistence and D1 visibility',
   { skip: !origin || process.env.PROBE_TEST_FAULTS !== '1' }, async () => {
     const stamp = process.env.PROBE_RUN_ID ?? Date.now().toString(36);

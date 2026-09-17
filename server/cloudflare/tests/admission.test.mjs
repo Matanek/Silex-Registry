@@ -119,6 +119,14 @@ test('resolve caret dependencies with numeric version order', () => {
   assert.equal(acceptsDependency('=1.10.0', '1.2.0'), false);
 });
 
+test('admit observed native artifact sizes within the bounded staging capacity', () => {
+  const value = fixture();
+  value.artifacts[0].size = 22995244;
+  descriptor(value);
+  value.artifacts[0].size = 32 * 1024 * 1024 + 1;
+  rejected(value, 'invalid_artifact');
+});
+
 test('list published versions in descending numeric order', async () => {
   const env = { DB: { prepare() { return { bind() { return this; },
     async all() { return { results: ['1.2.0', '1.10.0', '2.0.0'].map(version => ({ version, digest: 'a'.repeat(64) })) }; },
