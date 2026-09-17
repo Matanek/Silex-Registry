@@ -4,6 +4,9 @@ compatibility_date = "2026-09-17"
 workers_dev = true
 account_id = "99527982b858a931d1a2f7a4bcc7b49d"
 
+[vars]
+GITHUB_CLIENT_ID = "Ov23liijZ3iMXfwe7qnz"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "silex-registry-staging"

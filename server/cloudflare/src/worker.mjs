@@ -1,3 +1,5 @@
+import { loginFetch } from './login.mjs';
+
 const encoder = new TextEncoder();
 const sha = /^[a-f0-9]{64}$/;
 const namePattern = /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/;
@@ -260,6 +262,8 @@ export default {
       const url = new URL(request.url);
       insist(!url.search && !url.hash && !url.pathname.includes('%') && url.pathname.length <= 512, 'invalid_route', 400);
       const route = url.pathname;
+      const login = await loginFetch(request, env, route);
+      if (login) return login;
       if (route === '/__probe/inventory' && request.method === 'GET') {
         await authenticate(request, env);
         return Response.json({ objects: await inventory(env, 'probe/objects/sha256/'),
