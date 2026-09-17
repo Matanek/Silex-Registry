@@ -87,8 +87,7 @@ test('publication: GitHub identity owns a name and revoked access cannot publish
   const manifest = JSON.stringify({ name, version: '1.0.0', requires: { silex: '>=0.44.0' } });
   const source = archive([['Package.json', manifest]]);
   const descriptor = { schema: 1, manifest, source: { sha256: sha(source), size: source.length },
-    files: [{ path: 'Package.json', sha256: sha(manifest), size: Buffer.byteLength(manifest) }], artifacts: [],
-    provenance: { repository: 'https://github.com/Matanek/Silex-Registry.git', commit: 'a'.repeat(40) } };
+    files: [{ path: 'Package.json', sha256: sha(manifest), size: Buffer.byteLength(manifest) }], artifacts: [] };
   const unrecognized = await call('POST', '/v2/publications', bearer, JSON.stringify({ ...descriptor, ignored: true }));
   assert.equal(unrecognized.status, 422);
   assert.equal(unrecognized.value.error, 'invalid_descriptor');

@@ -61,6 +61,9 @@ test('reject malformed requirements and dependency declarations before upload', 
   rejected(withManifest(fixture(), manifest => { manifest.sources = '../outside'; }), 'invalid_sources');
   rejected(withManifest(fixture(), manifest => { manifest.artifacts = []; }), 'invalid_artifacts');
   rejected(withManifest(fixture(), manifest => { manifest.artifacts['macos-arm64'] = {}; }), 'invalid_artifacts');
+  descriptor(withManifest(fixture(), manifest => { manifest.repository = 'https://github.com/Silex-Test/Fixture'; }));
+  rejected(withManifest(fixture(), manifest => { manifest.repository = 'https://github.com/Silex-Test/Fixture/issues'; }), 'invalid_repository');
+  rejected(withManifest(fixture(), manifest => { manifest.repository = 'https://example.com/Silex-Test/Fixture'; }), 'invalid_repository');
 });
 
 test('resolve caret dependencies with numeric version order', () => {

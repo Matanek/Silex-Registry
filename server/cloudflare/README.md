@@ -26,9 +26,9 @@ PROBE_ORIGIN=http://127.0.0.1:8791 PROBE_TOKEN=<jeton> node tests/cli-local.mjs
 
 Le test CLI emploie le binaire candidat du worktree Silex, un magasin auteur et
 un magasin consommateur distincts, publie deux versions et exécute du code
-installé depuis le Worker. Chaque fixture possède un dépôt Git local et une
-origine GitHub ; la deuxième version publie un instantané local différent de
-`HEAD`, tout en enregistrant ce commit comme provenance. Il doit être lancé
+installé depuis le Worker. La première fixture n’a pas de dépôt Git ; la
+deuxième déclare un lien de développement facultatif, sans qu’il soit utilisé
+comme source des octets publiés. Il doit être lancé
 depuis ce dossier ; le binaire Silex compile la source du consommateur depuis
 la racine du groupe `Worktree`.
 
@@ -36,10 +36,10 @@ la racine du groupe `Worktree`.
 locaux avec fournisseur GitHub simulé. Elle n'est pas le Worker déployé.
 `LOGIN_FIXTURE_ORIGIN` active ses scénarios de ticket, concurrence, refus,
 expiration, révocation et propriété des noms. Le Worker déployé utilise le flux
-GitHub réel ; `LOGIN_KEY_B64` reste un secret Wrangler. La provenance exige un
-dépôt GitHub public possédé par l'identité stable connectée ; le commit local
-est enregistré sans comparaison avec les octets de l'instantané. Les routes
-d'auteur n'acceptent pas une simple URL comme preuve de propriété.
+GitHub réel ; `LOGIN_KEY_B64` reste un secret Wrangler. L’identité GitHub
+autorise l’auteur et les droits sur le nom. `Package.json.repository` peut
+indiquer une adresse GitHub à destination des contributeurs ; ce lien facultatif
+n’est pas vérifié, n’accorde aucun droit et ne sert pas à reconstituer la publication.
 
 `wrangler.remote.toml` utilise un Worker local avec bindings sur les ressources
 réelles `silex-registry-staging`. Toute écriture via cette configuration modifie

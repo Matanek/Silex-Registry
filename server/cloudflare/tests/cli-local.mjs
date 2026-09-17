@@ -15,7 +15,7 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const root = await mkdtemp(resolve(group, 'TestState/cloudflare-cli-'));
 const producer = process.env.PROBE_AUTHOR_ROOT ?? resolve(root, 'producer');
 const consumer = resolve(root, 'consumer');
-const repository = process.env.PROBE_REPOSITORY ?? 'git@github.com:Silex-Test/Fixture.git';
+const repository = process.env.PROBE_REPOSITORY ?? 'https://github.com/Silex-Test/Fixture';
 const stamp = process.env.PROBE_RUN_ID ?? Date.now().toString(36);
 const name = `CloudflareCli_${stamp}`;
 const artifact = Buffer.from(`shared artifact ${stamp}\n`);
@@ -42,16 +42,12 @@ try {
     await mkdir(resolve(packageRoot, 'Module'), { recursive: true });
     await mkdir(resolve(packageRoot, 'Boundary/macos-arm64'), { recursive: true });
     await writeFile(resolve(packageRoot, 'Package.json'), JSON.stringify({ name, version, sources: 'Module',
+      ...(version === '1.0.1' ? { repository } : {}),
       requires: { silex: '>=0.44.0' }, artifacts: { 'macos-arm64': { Shared: {
         path: 'Boundary/macos-arm64/libShared.a', sha256: artifactDigest } } } }));
     await writeFile(resolve(packageRoot, 'Module/Value.sx'), `public func answer() int { return ${version === '1.0.0' ? 41 : 40} }\n`);
     await writeFile(resolve(packageRoot, 'Boundary/macos-arm64/libShared.a'), artifact);
-    await execute('git', ['-C', packageRoot, 'init', '--quiet']);
-    await execute('git', ['-C', packageRoot, 'config', 'user.name', 'Silex staging fixture']);
-    await execute('git', ['-C', packageRoot, 'config', 'user.email', 'fixture@example.invalid']);
-    await execute('git', ['-C', packageRoot, 'remote', 'add', 'origin', repository]);
-    await execute('git', ['-C', packageRoot, 'add', 'Package.json', 'Module/Value.sx', 'Boundary/macos-arm64/libShared.a']);
-    await execute('git', ['-C', packageRoot, 'commit', '--quiet', '-m', `Fixture ${version}`]);
+    if (version === '1.0.1') await mkdir(resolve(packageRoot, '.git'));
     if (version === '1.0.1') await writeFile(resolve(packageRoot, 'Module/Value.sx'), 'public func answer() int { return 42 }\n');
     const preview = await run(producer, ['publish', packageRoot, '--dry-run']);
     const previewDigest = /publication sha256 ([a-f0-9]{64})/.exec(preview)?.[1];
@@ -60,9 +56,10 @@ try {
     assert.match(preview, /source files:[\s\S]*\+ Module\/Value\.sx/);
     assert.match(preview, /source files:[\s\S]*\+ Package\.json/);
     assert.match(preview, /separate artifacts:[\s\S]*\+ macos-arm64\/Shared <- Boundary\/macos-arm64\/libShared\.a/);
-    assert.match(preview, /excluded:[\s\S]*- \.git\//);
-    assert.match(preview, /GitHub reference: https:\/\/github\.com\//);
-    assert.match(preview, /published bytes come from the local snapshot, not this GitHub commit/);
+    if (version === '1.0.1') {
+      assert.match(preview, /excluded:[\s\S]*- \.git\//);
+      assert.match(preview, /development repository \(author-provided link\): https:\/\/github\.com\//);
+    } else assert.doesNotMatch(preview, /development repository/);
     assert.match(preview, /no authentication, network request or publication was performed/);
     const published = await run(producer, ['publish', packageRoot]);
     assert.match(published, new RegExp(`published ${name}@${version.replaceAll('.', '\\.')}`));
@@ -70,10 +67,9 @@ try {
     const metadata = await fetch(`${origin}/v2/packages/${name}/versions/${version}`);
     assert.equal(metadata.status, 200);
     const publishedDescriptor = (await metadata.json()).descriptor;
-    assert.equal(publishedDescriptor.provenance.repository,
-      repository.replace('git@github.com:', 'https://github.com/'));
-    assert.equal(publishedDescriptor.provenance.commit,
-      (await execute('git', ['-C', packageRoot, 'rev-parse', 'HEAD'])).stdout.trim());
+    assert.equal(publishedDescriptor.provenance, undefined);
+    assert.equal(JSON.parse(publishedDescriptor.manifest).repository,
+      version === '1.0.1' ? repository : undefined);
     const installed = await run(consumer, ['install', `${name}@${version}`]);
     assert.match(installed, new RegExp(`installed ${name}@${version.replaceAll('.', '\\.')}`));
     assert.deepEqual(await readFile(resolve(consumer, `silex-data/packages/${name}@${version}/Boundary/macos-arm64/libShared.a`)), artifact);
@@ -90,7 +86,7 @@ try {
   assert.equal(listed.objects.filter(object => object.key === `probe/objects/sha256/${artifactDigest}`).length, 1);
   console.log(JSON.stringify({ outcome: 'passed', cli, name, versions: ['1.0.0', '1.0.1'],
     artifact_sha256: artifactDigest, canonical_objects: 1, origin, consumer,
-    consumer_execution: '42', provenance: 'local GitHub origin and HEAD recorded; second snapshot differs from HEAD',
+    consumer_execution: '42', repository: 'first package without Git; second with author-provided development link',
     author: process.env.PROBE_AUTHOR_ROOT ? 'real GitHub login' : 'probe token' }));
 } finally {
   if (process.env.PROBE_KEEP_STATE !== '1') await rm(root, { recursive: true, force: true });

@@ -31,6 +31,6 @@ export default {
       return Response.json({ expired: true });
     }
     const response = await loginFetch(request, env, url.pathname, github);
-    return response ?? workerFetch(request, env, async () => {});
+    return response ?? workerFetch(request, env);
   },
 };

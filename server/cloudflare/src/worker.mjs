@@ -1,5 +1,5 @@
 import { loginFetch } from './login.mjs';
-import { inspectProvenance, ProvenanceFailure, verifyRepository } from './provenance.mjs';
+import { inspectProvenance, ProvenanceFailure } from './provenance.mjs';
 import { ArchiveFailure, verifySourceArchive } from './archive.mjs';
 
 const encoder = new TextEncoder();
@@ -68,6 +68,9 @@ function noPathCollision(paths) {
 }
 function validateManifest(manifest) {
   insist(validName(manifest?.name) && version(manifest?.version), 'invalid_identity');
+  if (manifest.repository !== undefined) insist(typeof manifest.repository === 'string' &&
+    manifest.repository.length <= 200 && /^https:\/\/github\.com\/[A-Za-z0-9-]{1,39}\/[A-Za-z0-9_.-]{1,100}$/.test(manifest.repository) &&
+    !['.', '..'].includes(manifest.repository.split('/').at(-1)), 'invalid_repository');
   insist(exactKeys(manifest.requires, ['silex']) && typeof manifest.requires.silex === 'string', 'invalid_requirement');
   const clauses = manifest.requires.silex.split(' ');
   const minimum = clauses[0].startsWith('>=') ? version(clauses[0].slice(2)) : null;
@@ -135,7 +138,7 @@ export function descriptor(value) {
   insist(exactKeys(value, value.provenance === undefined ?
     ['artifacts', 'files', 'manifest', 'schema', 'source'] :
     ['artifacts', 'files', 'manifest', 'provenance', 'schema', 'source']), 'invalid_descriptor');
-  inspectProvenance(value.provenance, false);
+  inspectProvenance(value.provenance);
   insist(typeof value.manifest === 'string' && value.manifest.length <= maxMetadata, 'invalid_manifest');
   let manifest;
   try { manifest = JSON.parse(value.manifest); } catch { throw new Rejection(422, 'invalid_manifest'); }
@@ -228,11 +231,10 @@ async function status(env, row) {
   return { id: row.id, state: version?.digest === row.digest ? 'published' : 'receiving', publication_sha256: row.digest,
     objects: listed.sort((a, b) => a.sha256.localeCompare(b.sha256)) };
 }
-async function create(request, env, githubId, verify) {
+async function create(request, env, githubId) {
   const value = await jsonBody(request);
   const { manifest } = descriptor(value);
-  const provenance = inspectProvenance(value.provenance, githubId !== '__probe__');
-  if (githubId !== '__probe__') await verify(provenance, githubId);
+  insist(value.provenance === undefined, 'unsupported_provenance');
   await owner(env, manifest.name, githubId);
   const manifestHash = await digest(encoder.encode(value.manifest));
   const manifestFile = value.files.find(file => file.path === 'Package.json');
@@ -313,11 +315,9 @@ async function persistObject(request, env, row, object, size) {
   insist(objectValid(await env.OBJECTS.head(key(object)), size, object), 'object_store_unavailable', 503);
   probeFault(request, env, 'after_object');
 }
-async function finalize(request, env, row, verify) {
+async function finalize(request, env, row) {
   const value = JSON.parse(row.descriptor);
   const { objects, manifest } = descriptor(value);
-  const provenance = inspectProvenance(value.provenance, row.credential !== '__probe__');
-  if (row.credential !== '__probe__') await verify(provenance, row.credential);
   await owner(env, row.name, row.credential);
   const existing = await env.DB.prepare('SELECT digest FROM probe_versions WHERE name=? AND version=?').bind(row.name, row.version).first();
   insist(!existing || existing.digest === row.digest, 'version_conflict', 409);
@@ -372,7 +372,7 @@ async function publicRead(request, env, name, version, target, artifact) {
     'content-encoding': 'identity', 'cache-control': 'no-transform', etag: `"${blob.sha256}"`,
   } });
 }
-export async function workerFetch(request, env, verify = verifyRepository) {
+export async function workerFetch(request, env) {
     try {
       const url = new URL(request.url);
       insist(!url.search && !url.hash && !url.pathname.includes('%') && url.pathname.length <= 512, 'invalid_route', 400);
@@ -385,14 +385,14 @@ export async function workerFetch(request, env, verify = verifyRepository) {
           uploads: await inventory(env, 'probe/uploads/') });
       }
       if (route === '/v2/publications' && request.method === 'POST') {
-        return Response.json(await create(request, env, await authenticate(request, env), verify));
+        return Response.json(await create(request, env, await authenticate(request, env)));
       }
       let match = /^\/v2\/publications\/([a-f0-9]{32})(?:\/(finalize|objects\/([a-f0-9]{64})))?$/.exec(route);
       if (match) {
         const credential = await authenticate(request, env);
         const row = await session(env, match[1], credential);
         if (!match[2] && request.method === 'GET') return Response.json(await status(env, row));
-        if (match[2] === 'finalize' && request.method === 'POST') return Response.json(await finalize(request, env, row, verify));
+        if (match[2] === 'finalize' && request.method === 'POST') return Response.json(await finalize(request, env, row));
         if (match[3] && request.method === 'PATCH') {
           const offset = Number(request.headers.get('upload-offset'));
           insist(Number.isSafeInteger(offset) && offset >= 0, 'invalid_offset', 400);
