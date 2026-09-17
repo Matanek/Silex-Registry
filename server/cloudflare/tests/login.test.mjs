@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { test } from 'node:test';
+import { archive } from './tar-fixture.mjs';
 
 const origin = process.env.LOGIN_FIXTURE_ORIGIN;
 const ticket = () => randomBytes(32).toString('hex');
@@ -84,7 +85,7 @@ test('publication: GitHub identity owns a name and revoked access cannot publish
   const bearer = `Bearer ${approved.value.token}`;
   const name = `CloudflareOwner_${randomBytes(4).toString('hex')}`;
   const manifest = JSON.stringify({ name, version: '1.0.0', requires: { silex: '>=0.44.0' } });
-  const source = Buffer.from(`source for ${name}`);
+  const source = archive([['Package.json', manifest]]);
   const descriptor = { schema: 1, manifest, source: { sha256: sha(source), size: source.length },
     files: [{ path: 'Package.json', sha256: sha(manifest), size: Buffer.byteLength(manifest) }], artifacts: [],
     provenance: { repository: 'https://github.com/Matanek/Silex-Registry.git', commit: 'a'.repeat(40) } };

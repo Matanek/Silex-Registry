@@ -55,7 +55,14 @@ try {
     if (version === '1.0.1') await writeFile(resolve(packageRoot, 'Module/Value.sx'), 'public func answer() int { return 42 }\n');
     const preview = await run(producer, ['publish', packageRoot, '--dry-run']);
     const previewDigest = /publication sha256 ([a-f0-9]{64})/.exec(preview)?.[1];
-    assert.match(preview, /provenance https:\/\/github\.com\//);
+    assert.match(preview, /dry run for .* \(nothing uploaded\)/);
+    assert.match(preview, /would publish this local snapshot: source files 2, separate artifacts 1/);
+    assert.match(preview, /source files:[\s\S]*\+ Package\.json[\s\S]*\+ Module\/Value\.sx/);
+    assert.match(preview, /separate artifacts:[\s\S]*\+ macos-arm64\/Shared <- Boundary\/macos-arm64\/libShared\.a/);
+    assert.match(preview, /excluded:[\s\S]*- \.git\//);
+    assert.match(preview, /GitHub reference: https:\/\/github\.com\//);
+    assert.match(preview, /published bytes come from the local snapshot, not this GitHub commit/);
+    assert.match(preview, /no authentication, network request or publication was performed/);
     const published = await run(producer, ['publish', packageRoot]);
     assert.match(published, new RegExp(`published ${name}@${version.replaceAll('.', '\\.')}`));
     assert.equal(/sha256 ([a-f0-9]{64})\)/.exec(published)?.[1], previewDigest);

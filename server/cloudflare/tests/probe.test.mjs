@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { test } from 'node:test';
+import { archive } from './tar-fixture.mjs';
 
 const origin = process.env.PROBE_ORIGIN;
 const token = process.env.PROBE_TOKEN ?? 'a'.repeat(64); // Local .dev.vars default; remote tests set a random value.
@@ -20,12 +21,14 @@ async function call(method, path, body, authorized = true, offset, fault) {
 }
 function fixture(name, version, shared, suffix = '') {
   const sharedDigest = sha(shared);
-  const source = Buffer.from(`source for ${name}@${version} ${suffix}\n`);
   const manifest = JSON.stringify({ name, version, requires: { silex: '>=0.44.0' },
     artifacts: { 'macos-arm64': { Shared: { path: 'Boundary/macos-arm64/libShared.a', sha256: sharedDigest } } } });
+  const module = Buffer.from(`public func answer() int { return 42 } // ${suffix}\n`);
+  const source = archive([['Package.json', manifest], ['Module/Value.sx', module]]);
   return { source, descriptor: { schema: 1, manifest,
     source: { size: source.length, sha256: sha(source) },
-    files: [{ path: 'Package.json', size: Buffer.byteLength(manifest), sha256: sha(manifest) }],
+    files: [{ path: 'Package.json', size: Buffer.byteLength(manifest), sha256: sha(manifest) },
+      { path: 'Module/Value.sx', size: module.length, sha256: sha(module) }],
     artifacts: [{ target: 'macos-arm64', name: 'Shared', path: 'Boundary/macos-arm64/libShared.a',
       size: shared.length, sha256: sharedDigest }] } };
 }
@@ -101,6 +104,17 @@ test('staging probe: hash, resume, immutable versions and shared artifact', { sk
   assert.equal(rejected.status, 422, JSON.stringify(rejected.json));
   const hidden = await call('GET', `/v2/packages/${name}_Bad`, undefined, false);
   assert.equal(hidden.status, 404);
+  const mismatch = fixture(`${name}_Mismatch`, '1.0.0', shared);
+  mismatch.source = archive([['Package.json', mismatch.descriptor.manifest],
+    ['Module/Value.sx', 'public func answer() int { return 41 } // \n']]);
+  mismatch.descriptor.source = { size: mismatch.source.length, sha256: sha(mismatch.source) };
+  const mismatchStart = await begin(mismatch);
+  assert.equal(mismatchStart.status, 200, JSON.stringify(mismatchStart.json));
+  await upload(mismatchStart.json.id, mismatch.descriptor.source.sha256, mismatch.source);
+  const mismatchResult = await call('POST', `/v2/publications/${mismatchStart.json.id}/finalize`, '');
+  assert.equal(mismatchResult.status, 422, JSON.stringify(mismatchResult.json));
+  assert.equal(mismatchResult.json.error, 'file_digest_mismatch');
+  assert.equal((await call('GET', `/v2/packages/${name}_Mismatch`, undefined, false)).status, 404);
   const missing = fixture(`${name}_Missing`, '1.0.0', shared);
   missing.descriptor.artifacts = [];
   assert.equal((await begin(missing)).status, 422);
@@ -138,11 +152,6 @@ test('staging probe: concurrent finalization of segmented objects', { skip: !ori
   const common = sha(shared);
   const candidates = [fixture(`CloudflareConcurrent_${stamp}_A`, '1.0.0', shared),
     fixture(`CloudflareConcurrent_${stamp}_B`, '1.0.0', shared)];
-  for (const item of candidates) {
-    item.source = Buffer.alloc(1024 * 1024, 0x41);
-    item.source.write(JSON.parse(item.descriptor.manifest).name);
-    item.descriptor.source = { size: item.source.length, sha256: sha(item.source) };
-  }
   const sessions = await Promise.all(candidates.map(begin));
   for (const result of sessions) assert.equal(result.status, 200, JSON.stringify(result.json));
   await Promise.all(candidates.flatMap((item, index) => [

@@ -1,5 +1,6 @@
 import { loginFetch } from './login.mjs';
 import { inspectProvenance, ProvenanceFailure, verifyRepository } from './provenance.mjs';
+import { ArchiveFailure, verifySourceArchive } from './archive.mjs';
 
 const encoder = new TextEncoder();
 const sha = /^[a-f0-9]{64}$/;
@@ -67,15 +68,19 @@ function descriptor(value) {
     value.source.size > 0 && value.source.size <= maxObject, 'invalid_source');
   insist(Array.isArray(value.files) && value.files.length > 0 && value.files.length <= 4096, 'invalid_files');
   const files = new Set();
+  let expanded = 0;
   for (const file of value.files) {
     insist(exactKeys(file, ['path', 'sha256', 'size']) && typeof file.path === 'string' && file.path.length > 0 && file.path.length <= 512 &&
       !file.path.startsWith('/') && !file.path.split('/').some(part => !part || part === '.' || part === '..' || part.includes('\\')) &&
-      sha.test(file.sha256 ?? '') && Number.isSafeInteger(file.size) && file.size >= 0, 'invalid_file');
+      sha.test(file.sha256 ?? '') && Number.isSafeInteger(file.size) && file.size >= 0 && file.size <= 16 * 1024 * 1024, 'invalid_file');
     insist(!files.has(file.path.toLowerCase()), 'path_collision');
     files.add(file.path.toLowerCase());
+    expanded += file.size;
+    insist(expanded <= 16 * 1024 * 1024, 'expanded_limit', 413);
   }
   const manifestFile = value.files.find(file => file.path === 'Package.json');
   insist(manifestFile, 'missing_manifest');
+  insist(manifestFile.size === encoder.encode(value.manifest).byteLength, 'manifest_mismatch');
   const objects = new Map([[value.source.sha256, value.source.size]]);
   insist(Array.isArray(value.artifacts) && value.artifacts.length <= 256, 'invalid_artifacts');
   const entries = new Set();
@@ -247,6 +252,14 @@ async function finalize(request, env, row, verify) {
   insist(!existing || existing.digest === row.digest, 'version_conflict', 409);
   if (!existing) {
     for (const [object, size] of objects) await persistObject(request, env, row, object, size);
+    const source = await env.OBJECTS.get(key(value.source.sha256));
+    insist(objectValid(source, value.source.size, value.source.sha256), 'stored_object_missing', 503);
+    try {
+      await verifySourceArchive(await source.arrayBuffer(), value, digest);
+    } catch (error) {
+      if (error instanceof ArchiveFailure) throw new Rejection(error.code === 'expanded_limit' ? 413 : 422, error.code);
+      throw error;
+    }
     for (const [name, constraint] of Object.entries(manifest.dependencies ?? {})) {
       const versions = await env.DB.prepare('SELECT version FROM probe_versions WHERE name=?').bind(name).all();
       const wanted = String(constraint).slice(1);
