@@ -85,6 +85,18 @@ objets. Relever dans le compte cible le plan, les quotas Workers/D1/R2 et
 les lectures/écritures avant la bascule. Les allocations gratuites ne sont
 pas un plafond de facturation : fixer une alerte de dépense et vérifier les
 conditions actuelles du plan. Aucun upgrade payant n'est implicite.
+À la fin des essais, le staging garde 171 objets pour 288 930 458 octets et
+D1 occupe 2 023 424 octets. La restauration garde une seconde copie R2 du
+même corpus ; les deux buckets totalisent donc au moins 577 860 916 octets
+hors fragments temporaires. Les seuils publics actuels du plan gratuit sont
+100 000 requêtes Worker par jour avec 10 ms de CPU par invocation,
+5 millions de lignes D1 lues et 100 000
+écrites par jour, 5 Go D1, et pour R2 Standard 10 Go-mois, 1 million
+d'opérations A et 10 millions B par mois. Ces mesures de stockage sont sous
+les allocations publiées ; elles ne mesurent ni les requêtes cumulées, ni le
+CPU, ni les charges effectivement affichées pour ce compte. L'accès Wrangler
+actuel n'a pas la permission de lecture de facturation : contrôler le plan et
+la dépense dans le tableau de bord Cloudflare avant la décision de bascule.
 Consulter les références officielles [Workers](https://developers.cloudflare.com/workers/platform/limits/),
 [D1](https://developers.cloudflare.com/d1/platform/pricing/) et
 [R2](https://developers.cloudflare.com/r2/pricing/) avant l'activation.
