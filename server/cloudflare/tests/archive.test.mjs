@@ -41,6 +41,21 @@ test('admit standard USTAR checksums terminated by NUL and space', async () => {
     error => error instanceof ArchiveFailure && error.code === 'invalid_tar_header');
 });
 
+test('admit space-padded checksums emitted by the active Zig tar writer', async () => {
+  const tar = gunzipSync(archive([['Package.json', manifest], ['Module/Value.sx', module]]));
+  for (const offset of [0, 1024]) {
+    const checksum = Number.parseInt(tar.subarray(offset + 148, offset + 155).toString('ascii'), 8);
+    tar.fill(32, offset + 148, offset + 155);
+    const digits = checksum.toString(8);
+    tar.write(digits, offset + 155 - digits.length, digits.length, 'ascii');
+    tar[offset + 155] = 0;
+  }
+  await verifySourceArchive(gzipSync(tar, { mtime: 0 }), descriptor, digest);
+  tar[148] = 33;
+  await assert.rejects(verifySourceArchive(gzipSync(tar, { mtime: 0 }), descriptor, digest),
+    error => error instanceof ArchiveFailure && error.code === 'invalid_tar_header');
+});
+
 test('admit a source snapshot above the former expanded staging bound', async () => {
   const modules = Array.from({ length: 4 }, (_, index) => [`Module/Part${index}.sx`, Buffer.alloc(9_201_566, 0x53)]);
   const item = { manifest, files: [files[0],

@@ -9,6 +9,9 @@ const execute = promisify(execFile);
 const runId = process.argv[2];
 const apply = process.argv[3] === '--apply';
 const storage = process.env.PROBE_STORAGE === 'local' ? 'local' : 'remote';
+const database = process.env.PROBE_DATABASE ?? 'silex-registry-staging';
+const bucket = process.env.PROBE_BUCKET ?? 'silex-registry-staging';
+const config = process.env.PROBE_CONFIG ?? 'wrangler.toml';
 assert.match(runId ?? '', /^[A-Za-z0-9]+$/);
 assert.ok(process.argv[3] === undefined || apply);
 const origin = process.env.PROBE_ORIGIN;
@@ -33,8 +36,8 @@ const names = [
 const quoted = names.map(name => `'${name}'`).join(',');
 
 async function query(sql) {
-  const { stdout } = await execute('./node_modules/.bin/wrangler', ['d1', 'execute', 'silex-registry-staging',
-    `--${storage}`, '--command', sql, '--json'], { maxBuffer: 16 * 1024 * 1024 });
+  const { stdout } = await execute('./node_modules/.bin/wrangler', ['d1', 'execute', database,
+    `--${storage}`, '--config', config, '--command', sql, '--json'], { maxBuffer: 16 * 1024 * 1024 });
   const result = JSON.parse(stdout);
   assert.equal(result[0]?.success, true);
   return result[0].results;
@@ -71,7 +74,7 @@ if (!plan) {
   const objectKeys = listing.objects.filter(item => candidates.has(item.key.replace('probe/objects/sha256/', '')) &&
     !otherReferences.has(item.key.replace('probe/objects/sha256/', ''))).map(item => item.key);
   const uploadKeys = listing.uploads.filter(item => [...sessionIds].some(id => item.key.startsWith(`probe/uploads/${id}/`))).map(item => item.key);
-  plan = { runId, origin, storage, names: versions.map(row => `${row.name}@${row.version}`),
+  plan = { runId, origin, storage, database, bucket, config, names: versions.map(row => `${row.name}@${row.version}`),
     owners: owners.map(row => ({ name: row.name, github_id: row.github_id })), sessions: [...sessionIds],
     objectKeys, uploadKeys, retainedSharedDigests: [...candidates].filter(sha => otherReferences.has(sha)), applied: false };
   await writeFile(receipt, JSON.stringify(plan, null, 2));
@@ -79,6 +82,9 @@ if (!plan) {
 assert.equal(plan.runId, runId);
 assert.equal(plan.origin, origin);
 assert.equal(plan.storage, storage);
+assert.equal(plan.database, database);
+assert.equal(plan.bucket, bucket);
+assert.equal(plan.config, config);
 assert.equal(plan.applied, false, 'cleanup already applied');
 for (const key of plan.objectKeys) assert.match(key, /^probe\/objects\/sha256\/[a-f0-9]{64}$/);
 for (const key of plan.uploadKeys) assert.ok(plan.sessions.some(id => key.startsWith(`probe/uploads/${id}/`)));
@@ -106,8 +112,8 @@ const present = new Set([...beforeDeletion.uploads, ...beforeDeletion.objects].m
 const pending = [...uploadKeys, ...objectKeys].filter(key => present.has(key));
 for (let start = 0; start < pending.length; start += 4) {
   await Promise.all(pending.slice(start, start + 4).map(key =>
-    execute('./node_modules/.bin/wrangler', ['r2', 'object', 'delete', `silex-registry-staging/${key}`,
-      `--${storage}`, '--force'], { maxBuffer: 1024 * 1024 })));
+    execute('./node_modules/.bin/wrangler', ['r2', 'object', 'delete', `${bucket}/${key}`,
+      `--${storage}`, '--config', config, '--force'], { maxBuffer: 1024 * 1024 })));
 }
 const remainingSessions = await query(`SELECT id FROM probe_sessions WHERE name IN (${quoted})`);
 const remainingVersions = await query(`SELECT name FROM probe_versions WHERE name IN (${quoted})`);

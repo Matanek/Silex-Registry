@@ -26,7 +26,8 @@ export async function importValidatedStore({ checked, database, bucket, config, 
     !/^[A-Za-z0-9_-]+$/.test(bucket)) throw new Error('invalid destination');
   const flags = [`--${storage}`, '--config', resolve(config),
     ...(persistTo && storage === 'local' ? ['--persist-to', resolve(persistTo)] : [])];
-  if (storage === 'remote' && (!/^https:\/\//.test(origin ?? '') || !/^[a-f0-9]{64}$/.test(token ?? '')))
+  if (storage === 'remote' && (!(/^https:\/\//.test(origin ?? '') ||
+    /^http:\/\/127\.0\.0\.1:[0-9]+$/.test(origin ?? '')) || !/^[a-f0-9]{64}$/.test(token ?? '')))
     throw new Error('remote import requires REGISTRY_ADMIN_ORIGIN and REGISTRY_MAINTENANCE_TOKEN');
   async function command(args) {
     const { stdout } = await execute(wrangler, args, { cwd: cloudflare, maxBuffer: 32 * 1024 * 1024 });

@@ -19,8 +19,9 @@ function octal(bytes) {
   if (end >= 0 && !bytes.subarray(end).every(byte => byte === 0 || byte === 32)) reject('invalid_tar_header');
   let value;
   try { value = decoder.decode(digits); } catch { reject('invalid_tar_header'); }
-  if (!/^[0-7]{1,11}$/.test(value)) reject('invalid_tar_header');
-  return Number.parseInt(value, 8);
+  const normalized = value.replace(/^ +/, '');
+  if (!/^[0-7]{1,11}$/.test(normalized)) reject('invalid_tar_header');
+  return Number.parseInt(normalized, 8);
 }
 async function expand(source, limit) {
   let reader;

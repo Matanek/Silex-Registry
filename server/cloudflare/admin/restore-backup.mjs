@@ -70,10 +70,10 @@ export async function validateBackup(root) {
   return { records, owners, objects };
 }
 
-export async function restoreBackup({ backup, database, bucket, config, storage, persistTo,
+export async function restoreBackup({ backup, database, bucket, config, storage, persistTo, origin, token,
   progress = console.log }) {
   const checked = await validateBackup(backup);
-  return importValidatedStore({ checked, database, bucket, config, storage, persistTo,
+  return importValidatedStore({ checked, database, bucket, config, storage, persistTo, origin, token,
     requireEmpty: true, progress });
 }
 
