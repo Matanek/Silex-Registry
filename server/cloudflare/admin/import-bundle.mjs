@@ -14,17 +14,20 @@ const wrangler = join(cloudflare, 'node_modules/.bin/wrangler');
 const q = value => `'${String(value).replaceAll("'", "''")}'`;
 
 export async function importBundle({ bundle, plan, owners, database, bucket, config, storage, persistTo,
-  progress = console.log }) {
+  origin, token, progress = console.log }) {
   const checked = await validateBundle(bundle, plan, owners);
-  return importValidatedStore({ checked, database, bucket, config, storage, persistTo, progress });
+  return importValidatedStore({ checked, database, bucket, config, storage, persistTo, origin, token, progress });
 }
 
 export async function importValidatedStore({ checked, database, bucket, config, storage, persistTo,
+  origin = process.env.REGISTRY_ADMIN_ORIGIN, token = process.env.REGISTRY_MAINTENANCE_TOKEN,
   requireEmpty = false, progress = console.log }) {
   if (!['local', 'remote'].includes(storage) || !/^[A-Za-z0-9_-]+$/.test(database) ||
     !/^[A-Za-z0-9_-]+$/.test(bucket)) throw new Error('invalid destination');
   const flags = [`--${storage}`, '--config', resolve(config),
     ...(persistTo && storage === 'local' ? ['--persist-to', resolve(persistTo)] : [])];
+  if (storage === 'remote' && (!/^https:\/\//.test(origin ?? '') || !/^[a-f0-9]{64}$/.test(token ?? '')))
+    throw new Error('remote import requires REGISTRY_ADMIN_ORIGIN and REGISTRY_MAINTENANCE_TOKEN');
   async function command(args) {
     const { stdout } = await execute(wrangler, args, { cwd: cloudflare, maxBuffer: 32 * 1024 * 1024 });
     return stdout;
@@ -55,22 +58,42 @@ export async function importValidatedStore({ checked, database, bucket, config, 
   try {
     let index = 0;
     for (const [digest, blob] of checked.objects) {
-      const objectPath = `${bucket}/probe/objects/sha256/${digest}`;
-      const downloaded = join(scratch, digest);
-      let found = false;
-      try {
-        await command(['r2', 'object', 'get', objectPath, ...flags, '--file', downloaded]);
-        found = true;
-      } catch (error) {
-        if (!/not found|does not exist|404/i.test(`${error.stdout ?? ''}\n${error.stderr ?? ''}`)) throw error;
-      }
-      if (found) {
-        const checksum = createHash('sha256');
-        for await (const chunk of createReadStream(downloaded)) checksum.update(chunk);
-        if (checksum.digest('hex') !== digest) throw new Error(`stored object conflict ${digest}`);
-        await rm(downloaded);
+      if (origin) {
+        const url = `${origin}/v2/admin/objects/${digest}`;
+        const headers = { authorization: `Bearer ${token}` };
+        const present = await fetch(url, { method: 'HEAD', headers });
+        if (present.status !== 200 && present.status !== 404)
+          throw new Error(`object inspection failed ${digest}: ${present.status}`);
+        if (present.status === 200) {
+          if (Number(present.headers.get('content-length')) !== blob.size)
+            throw new Error(`stored object size conflict ${digest}`);
+        } else {
+          const uploaded = await fetch(url, { method: 'PUT',
+            headers: { ...headers, 'content-length': String(blob.size) },
+            body: createReadStream(blob.path), duplex: 'half' });
+          if (uploaded.status !== 200) throw new Error(`object upload failed ${digest}: ${uploaded.status}`);
+          const verified = await fetch(url, { method: 'HEAD', headers });
+          if (verified.status !== 200 || Number(verified.headers.get('content-length')) !== blob.size)
+            throw new Error(`object verification failed ${digest}`);
+        }
       } else {
-        await command(['r2', 'object', 'put', objectPath, ...flags, '--file', blob.path, '--force']);
+        const objectPath = `${bucket}/probe/objects/sha256/${digest}`;
+        const downloaded = join(scratch, digest);
+        let found = false;
+        try {
+          await command(['r2', 'object', 'get', objectPath, ...flags, '--file', downloaded]);
+          found = true;
+        } catch (error) {
+          if (!/not found|does not exist|404/i.test(`${error.stdout ?? ''}\n${error.stderr ?? ''}`)) throw error;
+        }
+        if (found) {
+          const checksum = createHash('sha256');
+          for await (const chunk of createReadStream(downloaded)) checksum.update(chunk);
+          if (checksum.digest('hex') !== digest) throw new Error(`stored object conflict ${digest}`);
+          await rm(downloaded);
+        } else {
+          await command(['r2', 'object', 'put', objectPath, ...flags, '--file', blob.path, '--force']);
+        }
       }
       index++;
       if (index % 10 === 0 || index === checked.objects.size)

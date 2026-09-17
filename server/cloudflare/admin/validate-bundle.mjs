@@ -25,6 +25,7 @@ async function verifyObject(root, digest, size) {
 }
 
 export async function validateBundle(bundleRoot, planPath, ownersPath) {
+  bundleRoot = resolve(bundleRoot);
   const plan = await readJson(planPath);
   const ownersFile = await readJson(ownersPath);
   requireValid(plan.schema === 1 && Array.isArray(plan.ordered) && Array.isArray(plan.blocked) &&

@@ -11,6 +11,8 @@ const maxMetadata = 262144;
 const maxChunk = 65536;
 const maxSourceObject = 32 * 1024 * 1024;
 const maxArtifactObject = 64 * 1024 * 1024; // Historical SDL requires 51,047,580 bytes.
+const sessionLifetime = 7 * 24 * 60 * 60 * 1000;
+const sessionPruneAge = 8 * 24 * 60 * 60 * 1000;
 
 class Rejection extends Error {
   constructor(status, code) { super(code); this.status = status; this.code = code; }
@@ -316,6 +318,11 @@ async function session(env, id, githubId) {
   const row = await env.DB.prepare('SELECT * FROM probe_sessions WHERE id=?').bind(id).first();
   insist(row, 'publication_not_found', 404);
   insist(row.credential === githubId, 'forbidden', 403);
+  if (row.created_at <= Date.now() - sessionLifetime) {
+    const published = await env.DB.prepare('SELECT digest FROM probe_versions WHERE name=? AND version=?')
+      .bind(row.name, row.version).first();
+    insist(published?.digest === row.digest, 'session_expired', 410);
+  }
   return row;
 }
 async function owner(env, name, githubId) {
@@ -372,7 +379,47 @@ async function create(request, env, githubId) {
   await env.DB.prepare('INSERT OR IGNORE INTO probe_sessions VALUES (?,?,?,?,?,?,?)')
     .bind(id, githubId, publication, manifest.name, manifest.version, normalized, Date.now()).run();
   const row = await env.DB.prepare('SELECT * FROM probe_sessions WHERE credential=? AND digest=?').bind(githubId, publication).first();
+  if (row.created_at <= Date.now() - sessionLifetime) {
+    const published = await env.DB.prepare('SELECT digest FROM probe_versions WHERE name=? AND version=?')
+      .bind(manifest.name, manifest.version).first();
+    insist(published?.digest === publication, 'session_expired', 410);
+  }
   return status(env, row);
+}
+async function authenticateMaintenance(request, env) {
+  const match = /^Bearer ([a-f0-9]{64})$/.exec(request.headers.get('authorization') ?? '');
+  insist(match, 'unauthorized', 401);
+  const expected = env.MAINTENANCE_TOKEN_SHA256 ?? env.STAGING_TOKEN_SHA256;
+  insist(sha.test(expected ?? '') && await digest(encoder.encode(match[1])) === expected, 'forbidden', 403);
+}
+async function maintenance(request, env, id) {
+  await authenticateMaintenance(request, env);
+  const row = await env.DB.prepare('SELECT created_at FROM probe_sessions WHERE id=?').bind(id).first();
+  insist(row && row.created_at <= Date.now() - sessionPruneAge, 'session_not_expired', 409);
+  const page = await env.OBJECTS.list({ prefix: `probe/uploads/${id}/`, limit: 1000 });
+  return Response.json({ keys: page.objects.map(item => item.key) },
+    { headers: { 'cache-control': 'no-store' } });
+}
+async function administrativeObject(request, env, object) {
+  await authenticateMaintenance(request, env);
+  const path = key(object);
+  if (request.method === 'HEAD') {
+    const stored = await env.OBJECTS.head(path);
+    insist(stored && objectValid(stored, stored.size, object), 'stored_object_missing', 404);
+    return new Response(null, { headers: { 'content-length': String(stored.size), 'cache-control': 'no-store' } });
+  }
+  insist(request.method === 'PUT', 'method_not_allowed', 405);
+  const size = Number(request.headers.get('content-length'));
+  insist(Number.isSafeInteger(size) && size > 0 && size <= maxArtifactObject && request.body,
+    'object_limit', 413);
+  try {
+    await env.OBJECTS.put(path, request.body, { sha256: object });
+  } catch (error) {
+    if (/\(10037\)$/.test(String(error?.message ?? ''))) throw new Rejection(422, 'digest_mismatch');
+    throw error;
+  }
+  insist(objectValid(await env.OBJECTS.head(path), size, object), 'object_store_unavailable', 503);
+  return Response.json({ sha256: object, size }, { headers: { 'cache-control': 'no-store' } });
 }
 async function append(request, env, row, object, offset) {
   const value = JSON.parse(row.descriptor);
@@ -498,10 +545,14 @@ export async function workerFetch(request, env) {
       const login = await loginFetch(request, env, route);
       if (login) return login;
       if (route === '/__probe/inventory' && request.method === 'GET') {
-        await authenticate(request, env);
+        insist(await authenticate(request, env) === '__probe__', 'forbidden', 403);
         return Response.json({ objects: await inventory(env, 'probe/objects/sha256/'),
           uploads: await inventory(env, 'probe/uploads/') });
       }
+      const admin = /^\/v2\/admin\/uploads\/([a-f0-9]{32})$/.exec(route);
+      if (admin && request.method === 'GET') return await maintenance(request, env, admin[1]);
+      const administrativeBlob = /^\/v2\/admin\/objects\/([a-f0-9]{64})$/.exec(route);
+      if (administrativeBlob) return await administrativeObject(request, env, administrativeBlob[1]);
       if (route === '/v2/publications' && request.method === 'POST') {
         return Response.json(await create(request, env, await authenticate(request, env)));
       }

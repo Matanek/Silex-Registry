@@ -73,7 +73,12 @@ absente faute de deux artefacts historiques.
 reprend ce contrôle avant tout transfert, vérifie les objets R2 déjà présents,
 place les objets manquants puis insère noms et versions avec `INSERT OR IGNORE`.
 Il refuse un nom, une version ou un objet préexistant divergent et vérifie les
-lignes D1 finales. Appliquer d'abord les migrations D1 sur la destination.
+lignes D1 finales. En mode distant, définir `REGISTRY_ADMIN_ORIGIN` sur l'origine
+du Worker lié à la destination et `REGISTRY_MAINTENANCE_TOKEN` sur son jeton
+administratif de 64 caractères hexadécimaux. Le Worker vérifie le SHA-256 en
+écrivant chaque objet R2 ; un upload direct avec `wrangler r2 object put` ne
+fournit pas ce checksum et n'est pas lisible par le registre. Appliquer d'abord
+les migrations D1 sur la destination.
 `node tests/import-local.mjs` exerce deux imports d'un sous-lot historique dans
 un état Wrangler temporaire et vérifie le refus d'un objet altéré.
 
@@ -89,3 +94,11 @@ revérifie la copie puis restaure vers une base D1 vide. Employer une base et un
 bucket R2 distincts du service source. Le test local restaure la copie dans un
 second état Wrangler isolé et refuse une nouvelle restauration vers cet état
 déjà rempli.
+
+Une session de publication reste reprenable pendant sept jours depuis sa
+création. Après huit jours, `admin/prune-sessions.mjs ORIGIN --local|--remote
+DATABASE BUCKET CONFIG --plan|--apply` retire ses fragments R2 puis ses lignes
+D1 ; le délai d'un jour protège une requête déjà en cours au moment de
+l'expiration. Le script exige `REGISTRY_MAINTENANCE_TOKEN`. Il peut être relancé
+après une interruption : la session D1 est supprimée seulement après ses
+fragments. Les objets canoniques publiés ne sont jamais visés par cette purge.
