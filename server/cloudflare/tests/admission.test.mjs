@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { test } from 'node:test';
-import { acceptsDependency, descriptor } from '../src/worker.mjs';
+import { acceptsDependency, descriptor, workerFetch } from '../src/worker.mjs';
 
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 function fixture() {
@@ -72,4 +72,42 @@ test('resolve caret dependencies with numeric version order', () => {
   assert.equal(acceptsDependency('^1.2.0', '2.0.0'), false);
   assert.equal(acceptsDependency('=1.10.0', '1.10.0'), true);
   assert.equal(acceptsDependency('=1.10.0', '1.2.0'), false);
+});
+
+test('stop oversized streaming metadata and chunks before storing them', async () => {
+  const token = 'a'.repeat(64);
+  const value = fixture();
+  const row = { id: 'f'.repeat(32), credential: '__probe__', descriptor: JSON.stringify(value),
+    name: 'AdmissionFixture', version: '1.0.0', digest: 'c'.repeat(64) };
+  let stored = 0;
+  const env = { STAGING_TOKEN_SHA256: sha(token),
+    DB: { prepare(query) { return { bind() { return this; },
+      async first() { return query.includes('FROM probe_sessions') ? row : null; },
+      async all() { return { results: [] }; } }; } },
+    OBJECTS: { async head() { return null; }, async put() { stored++; } } };
+  function oversized(size) {
+    let canceled = false;
+    const body = new ReadableStream({
+      start(controller) { controller.enqueue(new Uint8Array(size)); },
+      pull() { throw new Error('read past limit'); },
+      cancel() { canceled = true; },
+    }, { highWaterMark: 0 });
+    return { body, wasCanceled: () => canceled };
+  }
+  const metadata = oversized(262145);
+  const created = await workerFetch(new Request('https://registry.example/v2/publications', {
+    method: 'POST', headers: { authorization: `Bearer ${token}` }, body: metadata.body, duplex: 'half',
+  }), env);
+  assert.equal(created.status, 413);
+  assert.equal((await created.json()).error, 'metadata_limit');
+  assert.equal(metadata.wasCanceled(), true);
+  const chunk = oversized(65537);
+  const uploaded = await workerFetch(new Request(`https://registry.example/v2/publications/${row.id}/objects/${value.source.sha256}`, {
+    method: 'PATCH', headers: { authorization: `Bearer ${token}`, 'upload-offset': '0' },
+    body: chunk.body, duplex: 'half',
+  }), env);
+  assert.equal(uploaded.status, 413);
+  assert.equal((await uploaded.json()).error, 'chunk_limit');
+  assert.equal(chunk.wasCanceled(), true);
+  assert.equal(stored, 0);
 });

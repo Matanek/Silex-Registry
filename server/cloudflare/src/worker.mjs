@@ -126,10 +126,37 @@ async function inventory(env, prefix) {
 function objectValid(object, size, expected) {
   return object?.size === size && object.checksums?.sha256 && hex(object.checksums.sha256) === expected;
 }
+async function boundedBody(request, limit, code) {
+  const declared = request.headers.get('content-length');
+  if (declared !== null) insist(/^(0|[1-9][0-9]*)$/.test(declared) && Number(declared) <= limit, code, 413);
+  if (!request.body) return new Uint8Array(0);
+  const reader = request.body.getReader();
+  const chunks = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > limit) {
+        await reader.cancel().catch(() => {});
+        throw new Rejection(413, code);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
 async function jsonBody(request) {
-  insist(Number(request.headers.get('content-length') ?? 0) <= maxMetadata, 'metadata_limit', 413);
-  const bytes = await request.arrayBuffer();
-  insist(bytes.byteLength <= maxMetadata, 'metadata_limit', 413);
+  const bytes = await boundedBody(request, maxMetadata, 'metadata_limit');
   try { return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); }
   catch { throw new Rejection(422, 'invalid_json'); }
 }
@@ -258,9 +285,8 @@ async function append(request, env, row, object, offset) {
   const item = current.objects.find(entry => entry.sha256 === object);
   if (item.available) return { offset: size };
   insist(offset === item.offset, 'offset_conflict', 409);
-  insist(Number(request.headers.get('content-length') ?? 0) <= maxChunk, 'chunk_limit', 413);
-  const bytes = await request.arrayBuffer();
-  insist(bytes.byteLength > 0 && bytes.byteLength <= maxChunk && offset + bytes.byteLength <= size, 'chunk_limit', 413);
+  const bytes = await boundedBody(request, maxChunk, 'chunk_limit');
+  insist(bytes.byteLength > 0 && offset + bytes.byteLength <= size, 'chunk_limit', 413);
   const chunk = await digest(bytes);
   const stored = await env.OBJECTS.put(chunkKey(row.id, object, offset, chunk), bytes,
     { onlyIf: { etagDoesNotMatch: '*' }, sha256: chunk });
