@@ -1,5 +1,5 @@
 const block = 512;
-const maxExpanded = 16 * 1024 * 1024; // Bounded staging probe, not the production limit.
+export const maxExpanded = 48 * 1024 * 1024; // Bounded staging candidate, not the production limit.
 const decoder = new TextDecoder('utf-8', { fatal: true });
 
 export class ArchiveFailure extends Error {

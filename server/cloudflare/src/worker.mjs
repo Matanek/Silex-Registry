@@ -1,6 +1,6 @@
 import { loginFetch } from './login.mjs';
 import { inspectProvenance, ProvenanceFailure } from './provenance.mjs';
-import { ArchiveFailure, verifySourceArchive } from './archive.mjs';
+import { ArchiveFailure, maxExpanded, verifySourceArchive } from './archive.mjs';
 
 const encoder = new TextEncoder();
 const sha = /^[a-f0-9]{64}$/;
@@ -267,7 +267,7 @@ export function descriptor(value) {
     insist(exactKeys(file, ['path', 'sha256', 'size']) && safePath(file.path) &&
       sha.test(file.sha256 ?? '') && Number.isSafeInteger(file.size) && file.size >= 0 && file.size <= 16 * 1024 * 1024, 'invalid_file');
     expanded += file.size;
-    insist(expanded <= 16 * 1024 * 1024, 'expanded_limit', 413);
+    insist(expanded <= maxExpanded, 'expanded_limit', 413);
   }
   const manifestFile = value.files.find(file => file.path === 'Package.json');
   insist(manifestFile, 'missing_manifest');

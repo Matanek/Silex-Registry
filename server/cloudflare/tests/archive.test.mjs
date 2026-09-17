@@ -25,3 +25,10 @@ test('admit the exact source snapshot and reject descriptor or archive substitut
   await assert.rejects(verifySourceArchive(Buffer.from('not a gzip archive'), descriptor, digest),
     error => error instanceof ArchiveFailure && error.code === 'invalid_gzip');
 });
+
+test('admit a source snapshot above the former expanded staging bound', async () => {
+  const largeModule = Buffer.alloc(36_806_264, 0x53);
+  const item = { manifest, files: [files[0],
+    { path: 'Module/Value.sx', size: largeModule.length, sha256: await digest(largeModule) }] };
+  await verifySourceArchive(archive([['Package.json', manifest], ['Module/Value.sx', largeModule]]), item, digest);
+});

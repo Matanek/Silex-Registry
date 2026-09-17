@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { test } from 'node:test';
 import { archive } from './tar-fixture.mjs';
 
@@ -19,11 +19,11 @@ async function call(method, path, body, authorized = true, offset, fault) {
   try { json = JSON.parse(bytes.toString()); } catch { json = null; }
   return { status: response.status, json, bytes };
 }
-function fixture(name, version, shared, suffix = '') {
+function fixture(name, version, shared, suffix = '', moduleBytes) {
   const sharedDigest = sha(shared);
   const manifest = JSON.stringify({ name, version, requires: { silex: '>=0.44.0' },
     artifacts: { 'macos-arm64': { Shared: { path: 'Boundary/macos-arm64/libShared.a', sha256: sharedDigest } } } });
-  const module = Buffer.from(`public func answer() int { return 42 } // ${suffix}\n`);
+  const module = moduleBytes ?? Buffer.from(`public func answer() int { return 42 } // ${suffix}\n`);
   const source = archive([['Package.json', manifest], ['Module/Value.sx', module]]);
   return { source, module, descriptor: { schema: 1, manifest,
     source: { size: source.length, sha256: sha(source) },
@@ -176,6 +176,35 @@ test('staging probe: native object larger than the original staging bound',
     for await (const chunk of response.body) { actual.update(chunk); size += chunk.byteLength; }
     assert.equal(size, artifact.length);
     assert.equal(actual.digest('hex'), sha(artifact));
+  });
+
+test('staging probe: source snapshot larger than the original expanded bound',
+  { skip: !origin || process.env.PROBE_TEST_LARGE_SOURCE !== '1' }, async () => {
+    const name = `CloudflareLargeSource_${process.env.PROBE_RUN_ID ?? Date.now().toString(36)}`;
+    const module = Buffer.alloc(36_806_264);
+    for (let offset = 0; offset < module.length; offset += 48 * 1024) {
+      const fragment = randomBytes(16 * 1024);
+      for (let repetition = 0; repetition < 3; repetition++) {
+        const start = offset + repetition * fragment.length;
+        if (start < module.length) fragment.copy(module, start, 0, Math.min(fragment.length, module.length - start));
+      }
+    }
+    const shared = Buffer.from(`large source artifact ${name}\n`);
+    const item = fixture(name, '1.0.0', shared, '', module);
+    assert.ok(item.source.length > 8 * 1024 * 1024 && item.source.length < 32 * 1024 * 1024);
+    const started = await begin(item);
+    assert.equal(started.status, 200, JSON.stringify(started.json));
+    await upload(started.json.id, item.descriptor.source.sha256, item.source, 0, 65536);
+    await upload(started.json.id, sha(shared), shared, 0, 65536);
+    const finalized = await call('POST', `/v2/publications/${started.json.id}/finalize`, '');
+    assert.equal(finalized.status, 200, JSON.stringify(finalized.json));
+    const response = await fetch(`${origin}/v2/packages/${name}/versions/1.0.0/source`);
+    assert.equal(response.status, 200);
+    const actual = createHash('sha256');
+    let size = 0;
+    for await (const chunk of response.body) { actual.update(chunk); size += chunk.byteLength; }
+    assert.equal(size, item.source.length);
+    assert.equal(actual.digest('hex'), item.descriptor.source.sha256);
   });
 
 test('staging probe: interruption around R2 persistence and D1 visibility',
