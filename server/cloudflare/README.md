@@ -1,4 +1,4 @@
-# Témoin Cloudflare de Task-09 et parcours auteur de Task-10
+# Service Cloudflare candidat du registre Silex
 
 Ce Worker expérimental met à l'épreuve le protocole `/v2` du candidat Silex avec
 D1 pour les sessions et versions, et R2 pour les segments puis objets canoniques.
@@ -59,8 +59,10 @@ relais avec `PROBE_UPSTREAM` fixé exactement à cette URL ; employer ensuite
 `PROBE_ORIGIN=http://127.0.0.1:8793` pour le test CLI. Le relais n'est pas un
 composant du registre et ne doit pas être utilisé comme origine produit.
 
-Une réponse locale ou un essai de staging vert ne qualifie ni les gros objets,
-ni les quotas, ni les coûts Cloudflare pour le registre complet.
+Le service n'est actuellement déployé qu'en staging. Le corpus historique et
+son artefact SDL de 51 047 580 octets ont été lus sur ce Worker réel, et une
+copie complète a été restaurée dans des ressources Cloudflare distinctes.
+Les quotas et coûts de production demandent encore une surveillance réelle.
 
 Avant tout import historique, `admin/validate-bundle.mjs BUNDLE PLAN OWNERS`
 contrôle en lecture seule l'ordre des 155 versions, les preuves de propriété,
@@ -102,3 +104,13 @@ D1 ; le délai d'un jour protège une requête déjà en cours au moment de
 l'expiration. Le script exige `REGISTRY_MAINTENANCE_TOKEN`. Il peut être relancé
 après une interruption : la session D1 est supprimée seulement après ses
 fragments. Les objets canoniques publiés ne sont jamais visés par cette purge.
+
+La [procédure d'exploitation](OPERATIONS.md) décrit la bascule, les copies,
+les alertes et le retour arrière avant toute activation publique.
+
+`admin/run-maintenance.mjs --remote DATABASE BUCKET CONFIG ORIGIN BACKUP_ROOT
+--plan-retention` compose une copie vérifiée, la purge des sessions expirées
+et un plan de rétention. `--apply-retention` supprime uniquement ses copies
+automatiques terminées hors des trente plus récentes et des douze derniers
+points mensuels. Le jeton vient de `REGISTRY_MAINTENANCE_TOKEN` ; la routine
+échoue sans le secret et ne doit être planifiée qu'après la bascule qualifiée.
