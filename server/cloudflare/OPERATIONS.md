@@ -85,7 +85,8 @@ objets. Relever dans le compte cible le plan, les quotas Workers/D1/R2 et
 les lectures/écritures avant la bascule. Les allocations gratuites ne sont
 pas un plafond de facturation : fixer une alerte de dépense et vérifier les
 conditions actuelles du plan. Aucun upgrade payant n'est implicite.
-À la fin des essais, le staging garde 171 objets pour 288 930 458 octets et
+À la fin des essais, l'inventaire direct du Worker de staging trouve 171 objets
+canoniques pour 288 930 458 octets et aucun fragment d'upload ;
 D1 occupe 2 023 424 octets. La restauration garde une seconde copie R2 du
 même corpus ; les deux buckets totalisent donc au moins 577 860 916 octets
 hors fragments temporaires. Les seuils publics actuels du plan gratuit sont
@@ -93,10 +94,23 @@ hors fragments temporaires. Les seuils publics actuels du plan gratuit sont
 5 millions de lignes D1 lues et 100 000
 écrites par jour, 5 Go D1, et pour R2 Standard 10 Go-mois, 1 million
 d'opérations A et 10 millions B par mois. Ces mesures de stockage sont sous
-les allocations publiées ; elles ne mesurent ni les requêtes cumulées, ni le
-CPU, ni les charges effectivement affichées pour ce compte. L'accès Wrangler
-actuel n'a pas la permission de lecture de facturation : contrôler le plan et
-la dépense dans le tableau de bord Cloudflare avant la décision de bascule.
+les allocations publiées. Les captures du tableau de bord fournies le
+18 septembre 2026 affichent, pour la période courante R2, 0,00 $ d'usage
+facturable, 3,56 milliers d'opérations A, 9,86 milliers d'opérations B et
+288,94 Mo de stockage total. La page D1 affiche aussi 0,00 $ d'usage
+facturable, 430,65 milliers de lignes lues, 9,11 milliers écrites et
+4,06 Mo de stockage total, avec deux bases sur dix permises. L'analytique
+Workers sur 24 heures indique environ 6,94 milliers d'invocations, zéro
+erreur et un P90 CPU de 5 ms. Ces vues ne prouvent ni un coût total de compte
+nul ni le forfait Workers applicable ; vérifier ce forfait et la dépense
+globale avant la bascule.
+
+La même capture R2 affiche 264 objets dans le bucket de staging. Un inventaire
+complet du bucket, lu ensuite par un Worker local éphémère avec binding R2 réel,
+trouve exactement 171 objets canoniques, zéro fragment et zéro autre clé, pour
+288 930 458 octets. Le compteur de la capture ne décrit donc pas l'état lu à
+ce contrôle ; sa date de rafraîchissement effective reste inconnue. Ne supprimer
+aucun objet sur la seule foi des compteurs du tableau de bord.
 Consulter les références officielles [Workers](https://developers.cloudflare.com/workers/platform/limits/),
 [D1](https://developers.cloudflare.com/d1/platform/pricing/) et
 [R2](https://developers.cloudflare.com/r2/pricing/) avant l'activation.
