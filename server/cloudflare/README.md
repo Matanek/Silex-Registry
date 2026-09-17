@@ -2,8 +2,9 @@
 
 Ce Worker expérimental met à l'épreuve le protocole `/v2` du candidat Silex avec
 D1 pour les sessions et versions, et R2 pour les segments puis objets canoniques.
-Il n'est pas le registre public : son jeton unique de banc, ses contrôles
-d'admission et sa limite de 8 Mio par objet ne conviennent pas à la production.
+Il n'est pas le registre public : son jeton unique de banc et ses tables
+`probe_*` sont propres aux essais. L'admission borne les sources compressées à
+32 Mio, leur contenu à 48 Mio et chaque artefact distinct à 64 Mio.
 
 Le stockage local est celui de Wrangler. Depuis ce dossier :
 
@@ -60,3 +61,10 @@ composant du registre et ne doit pas être utilisé comme origine produit.
 
 Une réponse locale ou un essai de staging vert ne qualifie ni les gros objets,
 ni les quotas, ni les coûts Cloudflare pour le registre complet.
+
+Avant tout import historique, `admin/validate-bundle.mjs BUNDLE PLAN OWNERS`
+contrôle en lecture seule l'ordre des 155 versions, les preuves de propriété,
+les dépendances, les 171 objets par taille et SHA-256, et les archives source.
+Le lot préparé dans la Spec comporte 30 noms : `GFX.Nodes` a un propriétaire
+réservé mais aucune version importable. `GFX.Audio@0.4.0` reste explicitement
+absente faute de deux artefacts historiques.
