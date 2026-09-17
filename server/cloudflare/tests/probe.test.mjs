@@ -156,3 +156,47 @@ test('staging probe: concurrent finalization of segmented objects', { skip: !ori
   assert.deepEqual(inventory.json.objects.filter(object => object.key === `probe/objects/sha256/${common}`),
     [{ key: `probe/objects/sha256/${common}`, size: shared.length }]);
 });
+
+test('staging probe: same-version race and cross-run object retention',
+  { skip: !origin || process.env.PROBE_TEST_RACE_RETENTION !== '1' }, async () => {
+    const stamp = process.env.PROBE_RUN_ID ?? Date.now().toString(36);
+    const holdStamp = process.env.PROBE_HOLD_RUN_ID ?? `Hold${stamp}`;
+    const raceName = `CloudflareRace_${stamp}`;
+    const raceArtifact = Buffer.from(`race artifact ${stamp}\n`);
+    const rivals = [fixture(raceName, '1.0.0', raceArtifact, 'first'),
+      fixture(raceName, '1.0.0', raceArtifact, 'second')];
+    const rivalsStarted = await Promise.all(rivals.map(begin));
+    for (const result of rivalsStarted) assert.equal(result.status, 200, JSON.stringify(result.json));
+    await Promise.all(rivals.flatMap((item, index) => [
+      upload(rivalsStarted[index].json.id, item.descriptor.source.sha256, item.source),
+      upload(rivalsStarted[index].json.id, sha(raceArtifact), raceArtifact),
+    ]));
+    const outcomes = await Promise.all(rivalsStarted.map(result =>
+      call('POST', `/v2/publications/${result.json.id}/finalize`, '')));
+    assert.deepEqual(outcomes.map(item => item.status).sort(), [200, 409]);
+    const winner = outcomes.findIndex(item => item.status === 200);
+    const loser = 1 - winner;
+    const visible = await call('GET', `/v2/packages/${raceName}/versions/1.0.0`, undefined, false);
+    assert.equal(visible.status, 200);
+    assert.equal(visible.json.descriptor.source.sha256, rivals[winner].descriptor.source.sha256);
+    assert.equal((await call('POST', `/v2/publications/${rivalsStarted[winner].json.id}/finalize`, '')).status, 200);
+    assert.equal((await call('POST', `/v2/publications/${rivalsStarted[loser].json.id}/finalize`, '')).status, 409);
+
+    const shared = Buffer.from(`retained artifact ${stamp}\n`);
+    const target = fixture(`CloudflareRetention_${stamp}`, '1.0.0', shared);
+    const hold = fixture(`CloudflareRetention_${holdStamp}`, '1.0.0', shared);
+    for (const item of [target, hold]) {
+      const started = await begin(item);
+      assert.equal(started.status, 200, JSON.stringify(started.json));
+      await upload(started.json.id, item.descriptor.source.sha256, item.source);
+      if (!started.json.objects.find(object => object.sha256 === sha(shared)).available) {
+        await upload(started.json.id, sha(shared), shared);
+      }
+      const finalized = await call('POST', `/v2/publications/${started.json.id}/finalize`, '');
+      assert.equal(finalized.status, 200, JSON.stringify(finalized.json));
+    }
+    const inventory = await call('GET', '/__probe/inventory');
+    assert.equal(inventory.status, 200);
+    assert.equal(inventory.json.objects.filter(object => object.key === `probe/objects/sha256/${sha(shared)}`).length, 1);
+    console.log(JSON.stringify({ runId: stamp, holdRunId: holdStamp, retainedDigest: sha(shared) }));
+  });
