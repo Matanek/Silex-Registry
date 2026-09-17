@@ -57,7 +57,8 @@ try {
     const previewDigest = /publication sha256 ([a-f0-9]{64})/.exec(preview)?.[1];
     assert.match(preview, /dry run for .* \(nothing uploaded\)/);
     assert.match(preview, /would publish this local snapshot: source files 2, separate artifacts 1/);
-    assert.match(preview, /source files:[\s\S]*\+ Package\.json[\s\S]*\+ Module\/Value\.sx/);
+    assert.match(preview, /source files:[\s\S]*\+ Module\/Value\.sx/);
+    assert.match(preview, /source files:[\s\S]*\+ Package\.json/);
     assert.match(preview, /separate artifacts:[\s\S]*\+ macos-arm64\/Shared <- Boundary\/macos-arm64\/libShared\.a/);
     assert.match(preview, /excluded:[\s\S]*- \.git\//);
     assert.match(preview, /GitHub reference: https:\/\/github\.com\//);

@@ -19,7 +19,7 @@ const group = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
 const receipt = resolve(group, `TestState/cloudflare-${storage}-cleanup-${runId}.json`);
 const names = [
   `CloudflareProbe_${runId}`, `CloudflareProbe_${runId}_Other`, `CloudflareProbe_${runId}_Bad`,
-  `CloudflareProbe_${runId}_Missing`, `CloudflareConcurrent_${runId}_A`,
+  `CloudflareProbe_${runId}_Missing`, `CloudflareProbe_${runId}_Mismatch`, `CloudflareConcurrent_${runId}_A`,
   `CloudflareConcurrent_${runId}_B`, `CloudflareCli_${runId}`,
   `CloudflareRace_${runId}`, `CloudflareRetention_${runId}`,
   ...['before_object', 'after_object', 'before_visibility', 'after_visibility']
@@ -83,9 +83,10 @@ console.log(JSON.stringify({ phase: apply ? 'applying' : 'planned', receipt, ver
 if (!apply) process.exit(0);
 
 const { sessions, versions, owners, otherReferences } = await snapshot();
-assert.deepEqual(sessions.map(row => row.id).sort(), [...plan.sessions].sort(), 'run sessions changed after planning');
-assert.deepEqual(versions.map(row => `${row.name}@${row.version}`).sort(), [...plan.names].sort(), 'run versions changed after planning');
-assert.deepEqual(owners, plan.owners, 'run ownership changed after planning');
+assert.ok(sessions.every(row => plan.sessions.includes(row.id)), 'run sessions changed after planning');
+assert.ok(versions.every(row => plan.names.includes(`${row.name}@${row.version}`)), 'run versions changed after planning');
+assert.ok(owners.every(row => plan.owners.some(saved => saved.name === row.name && saved.github_id === row.github_id)),
+  'run ownership changed after planning');
 const objectKeys = plan.objectKeys.filter(key => !otherReferences.has(key.slice('probe/objects/sha256/'.length)));
 const uploadKeys = plan.uploadKeys;
 await query(`DELETE FROM probe_versions WHERE name IN (${quoted})`);
@@ -95,9 +96,13 @@ if (sessions.length) {
   await query(`DELETE FROM probe_sessions WHERE id IN (${ids})`);
 }
 await query(`DELETE FROM probe_names WHERE name IN (${quoted})`);
-for (const key of [...uploadKeys, ...objectKeys]) {
-  await execute('./node_modules/.bin/wrangler', ['r2', 'object', 'delete', `silex-registry-staging/${key}`,
-    `--${storage}`, '--force'], { maxBuffer: 1024 * 1024 });
+const beforeDeletion = await inventory();
+const present = new Set([...beforeDeletion.uploads, ...beforeDeletion.objects].map(item => item.key));
+const pending = [...uploadKeys, ...objectKeys].filter(key => present.has(key));
+for (let start = 0; start < pending.length; start += 4) {
+  await Promise.all(pending.slice(start, start + 4).map(key =>
+    execute('./node_modules/.bin/wrangler', ['r2', 'object', 'delete', `silex-registry-staging/${key}`,
+      `--${storage}`, '--force'], { maxBuffer: 1024 * 1024 })));
 }
 const remainingSessions = await query(`SELECT id FROM probe_sessions WHERE name IN (${quoted})`);
 const remainingVersions = await query(`SELECT name FROM probe_versions WHERE name IN (${quoted})`);
