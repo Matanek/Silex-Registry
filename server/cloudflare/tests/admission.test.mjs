@@ -121,9 +121,9 @@ test('resolve caret dependencies with numeric version order', () => {
 
 test('admit observed native artifact sizes within the bounded staging capacity', () => {
   const value = fixture();
-  value.artifacts[0].size = 22995244;
+  value.artifacts[0].size = 51047580;
   descriptor(value);
-  value.artifacts[0].size = 32 * 1024 * 1024 + 1;
+  value.artifacts[0].size = 64 * 1024 * 1024 + 1;
   rejected(value, 'invalid_artifact');
 });
 

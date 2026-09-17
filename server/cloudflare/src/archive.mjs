@@ -14,7 +14,11 @@ function text(bytes) {
   catch { reject('invalid_tar_header'); }
 }
 function octal(bytes) {
-  const value = text(bytes).trim();
+  const end = bytes.indexOf(0);
+  const digits = end < 0 ? bytes : bytes.subarray(0, end);
+  if (end >= 0 && !bytes.subarray(end).every(byte => byte === 0 || byte === 32)) reject('invalid_tar_header');
+  let value;
+  try { value = decoder.decode(digits); } catch { reject('invalid_tar_header'); }
   if (!/^[0-7]{1,11}$/.test(value)) reject('invalid_tar_header');
   return Number.parseInt(value, 8);
 }

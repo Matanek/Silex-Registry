@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { test } from 'node:test';
+import { gzipSync, gunzipSync } from 'node:zlib';
 import { ArchiveFailure, verifySourceArchive } from '../src/archive.mjs';
 import { archive } from './tar-fixture.mjs';
 
@@ -24,6 +25,20 @@ test('admit the exact source snapshot and reject descriptor or archive substitut
     alteredManifest, digest), error => error instanceof ArchiveFailure && error.code === 'manifest_mismatch');
   await assert.rejects(verifySourceArchive(Buffer.from('not a gzip archive'), descriptor, digest),
     error => error instanceof ArchiveFailure && error.code === 'invalid_gzip');
+});
+
+test('admit standard USTAR checksums terminated by NUL and space', async () => {
+  const tar = gunzipSync(archive([['Package.json', manifest], ['Module/Value.sx', module]]));
+  for (const offset of [0, 1024]) {
+    const checksum = Number.parseInt(tar.subarray(offset + 148, offset + 155).toString('ascii'), 8);
+    tar.write(checksum.toString(8).padStart(6, '0'), offset + 148, 6, 'ascii');
+    tar[offset + 154] = 0;
+    tar[offset + 155] = 32;
+  }
+  await verifySourceArchive(gzipSync(tar, { mtime: 0 }), descriptor, digest);
+  tar[155] = 33;
+  await assert.rejects(verifySourceArchive(gzipSync(tar, { mtime: 0 }), descriptor, digest),
+    error => error instanceof ArchiveFailure && error.code === 'invalid_tar_header');
 });
 
 test('admit a source snapshot above the former expanded staging bound', async () => {

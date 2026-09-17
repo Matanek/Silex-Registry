@@ -9,7 +9,8 @@ const versionPattern = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
 const targets = new Set(['macos-arm64', 'macos-x64', 'linux-arm64', 'linux-x64', 'windows-arm64', 'windows-x64']);
 const maxMetadata = 262144;
 const maxChunk = 65536;
-const maxObject = 32 * 1024 * 1024; // Bounded staging candidate; production limits are not established.
+const maxSourceObject = 32 * 1024 * 1024;
+const maxArtifactObject = 64 * 1024 * 1024; // Historical SDL requires 51,047,580 bytes.
 
 class Rejection extends Error {
   constructor(status, code) { super(code); this.status = status; this.code = code; }
@@ -260,7 +261,7 @@ export function descriptor(value) {
   try { manifest = JSON.parse(value.manifest); } catch { throw new Rejection(422, 'invalid_manifest'); }
   validateManifest(manifest);
   insist(exactKeys(value.source, ['sha256', 'size']) && sha.test(value.source.sha256 ?? '') && Number.isSafeInteger(value.source.size) &&
-    value.source.size > 0 && value.source.size <= maxObject, 'invalid_source');
+    value.source.size > 0 && value.source.size <= maxSourceObject, 'invalid_source');
   insist(Array.isArray(value.files) && value.files.length > 0 && value.files.length <= 4096, 'invalid_files');
   let expanded = 0;
   for (const file of value.files) {
@@ -278,7 +279,7 @@ export function descriptor(value) {
   for (const item of value.artifacts) {
     insist(exactKeys(item, ['name', 'path', 'sha256', 'size', 'target']) && targets.has(item.target) && validName(item.name) &&
       safePath(item.path) &&
-      sha.test(item.sha256 ?? '') && Number.isSafeInteger(item.size) && item.size > 0 && item.size <= maxObject,
+      sha.test(item.sha256 ?? '') && Number.isSafeInteger(item.size) && item.size > 0 && item.size <= maxArtifactObject,
     'invalid_artifact');
     insist(!entries.has(`${item.target}/${item.name}`), 'duplicate_artifact');
     entries.add(`${item.target}/${item.name}`);
