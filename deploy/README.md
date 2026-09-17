@@ -1,8 +1,14 @@
-# Registry hosting
+# Historical v1 registry hosting
+
+This page describes the earlier GitHub Pages/VPS route. The current candidate
+is the [Cloudflare Worker](../server/cloudflare/README.md); use its
+[operations guide](../server/cloudflare/OPERATIONS.md) for the new bascule.
+The instructions below are retained only for the former protocol and its
+rollback evidence.
 
 ## Current GitHub Pages service
 
-GitHub Pages remains active until the VPS cutover is complete. Its workflow is
+GitHub Pages remains active until an authorized public cutover is complete. Its workflow is
 `.github/workflows/pages.yml` and its current custom domain is
 `registry.silex-lang.org`. Do not disable Pages before the production DNS and
 HTTPS checks below are green.

@@ -1,53 +1,30 @@
 # Silex package registry
 
-This repository assigns public Silex package names to their canonical Git
-repositories. It does not publish package versions or copy their manifests.
-Tagged commits in each registered repository are the source of truth for
-versions, compatibility, dependencies, extension grants, and contents.
+The candidate registry API is a Cloudflare Worker backed by D1 metadata and
+R2 objects. `silex publish` uploads a validated local source snapshot and its
+declared artifacts; published versions are immutable. GitHub verifies an
+author's identity. A manifest's optional `repository` is a development link
+for contributors and does not supply the published bytes or grant ownership.
+Package listings and installs are anonymous.
 
-The generated index is published at:
+The Worker, migrations, tests, administration scripts, staging configuration,
+and deployment procedure are under [server/cloudflare](server/cloudflare/README.md).
+The currently qualified deployment is an isolated staging Worker. Activation
+at the public registry domain and deployment of production bindings require
+separate approval and the checks in
+[the operations guide](server/cloudflare/OPERATIONS.md).
 
-`https://registry.silex-lang.org/v1/index.json`
+## Historical v1 registry
 
-## Layout
+The former registry maps names to canonical GitHub repositories. Its index
+remains at `https://registry.silex-lang.org/v1/index.json`; tagged repository
+commits supply its versions. [CONTRIBUTING.md](CONTRIBUTING.md),
+`registry/v1`, `scripts/build-registry.mjs`, and [deploy](deploy/README.md)
+describe that legacy protocol and its VPS deployment. They are preserved for
+migration and existing clients. Running an index build or deploying code must
+never delete the D1/R2 objects of the candidate service.
 
-```text
-registry/v1/packages/
-  GFX.json
-  STD.json
-```
-
-Each immutable registration has this shape:
-
-```json
-{
-  "schema": 1,
-  "name": "GFX",
-  "repository": "https://github.com/Matanek/Silex-Lib-GFX.git"
-}
-```
-
-Run `silex register path/to/Package` once to register a new package name. Once
-registered, the package owner publishes versions directly with Git tags. Each
-`vMAJOR.MINOR.PATCH` tag must contain a `Package.json` declaring that exact
-version. `silex check path/to/Package` is an optional, read-only validation.
-
-Build and validate the deployable schema-2 index with:
-
-```sh
-node scripts/build-registry.mjs dist/v1
-```
-
-Validated `main` commits can also deploy that static output as an immutable VPS
-release. See [deploy/README.md](deploy/README.md) for the server layout, GitHub
-settings, and production-domain activation.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the registration contract.
+The earlier PHP/SQLite durable-store prototype remains under [server](server/README.md)
+as historical migration evidence; it is not the Cloudflare production route.
 
 The registry tooling uses the Apache-2.0 with LLVM exception license.
-
-## Experimental durable storage
-
-An isolated, non-deployed `/v2` prototype and its independent HTTP/crash tests
-live in [server/](server/README.md). This does not change the current `/v1`
-registration, version or deployment contract.

@@ -1,4 +1,10 @@
-# Register a package
+# Historical v1 registration
+
+This page applies only to the former Git-tag registry and its existing
+clients. The Cloudflare candidate accepts `silex login` and `silex publish`
+directly; see the [current registry overview](README.md) and
+[service operations](server/cloudflare/OPERATIONS.md). The public domain has
+not yet switched to that candidate.
 
 A package needs one registry pull request during its lifetime. Later versions
 are discovered directly from the repository's Git tags and require no registry

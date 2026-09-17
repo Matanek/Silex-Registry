@@ -1,4 +1,9 @@
-# Experimental durable registry
+# Historical PHP/SQLite durable registry prototype
+
+This subtree records the former VPS candidate. The Cloudflare Worker under
+[cloudflare](cloudflare/README.md) is the current publication candidate. The
+steps below remain useful for reproducing old migration evidence and must not
+be used as the Cloudflare deployment procedure.
 
 This is a local `/v2` storage prototype, not a deployed replacement for `/v1`.
 The existing static build and deployment are unchanged. HTTP login creates an
