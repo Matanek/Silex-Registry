@@ -27,8 +27,9 @@ if [ "${#maintenance_token}" -ne 64 ]; then
 fi
 
 export REGISTRY_MAINTENANCE_TOKEN="$maintenance_token"
-export WRANGLER_LOG_PATH="$backup_root/wrangler-maintenance-$$.log"
-trap 'rm -f "$WRANGLER_LOG_PATH"' EXIT
+export WRANGLER_LOG_PATH
+WRANGLER_LOG_PATH=$(mktemp -d "$backup_root/wrangler-maintenance.XXXXXX")
+trap 'rm -rf -- "$WRANGLER_LOG_PATH"' EXIT
 
 cd "$registry_root"
 node server/cloudflare/admin/run-maintenance.mjs \
