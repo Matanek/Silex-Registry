@@ -48,8 +48,18 @@ test('login: ticket isolation, pending, identity, replay and revocation', { skip
   const session = await call('GET', '/v2/session', bearer);
   assert.equal(session.value.github_id, '123456789');
   assert.equal(session.value.login, 'fixture-user');
+  assert.deepEqual(Object.keys(session.value).sort(), ['expires_at', 'github_id', 'login']);
+  assert.ok(session.value.expires_at > Date.now() / 1000 + 23 * 60 * 60);
+  assert.ok(session.value.expires_at < Date.now() / 1000 + 25 * 60 * 60);
+  const renewed = await call('POST', '/v2/session/renew', bearer);
+  assert.equal(renewed.status, 200, JSON.stringify(renewed.value));
+  assert.equal(renewed.value.github_id, session.value.github_id);
+  assert.ok(renewed.value.expires_at > Date.now() / 1000 + 29 * 24 * 60 * 60);
+  assert.ok(renewed.value.expires_at <= Date.now() / 1000 + 30 * 24 * 60 * 60);
+  assert.ok((await call('GET', '/v2/session', bearer)).value.expires_at >= renewed.value.expires_at);
   assert.equal((await call('DELETE', '/v2/session', bearer)).value.revoked, true);
   assert.equal((await call('GET', '/v2/session', bearer)).status, 401);
+  assert.equal((await call('POST', '/v2/session/renew', bearer)).status, 401);
 });
 
 test('login: refusal and invalid request body', { skip: !origin }, async () => {
@@ -60,6 +70,22 @@ test('login: refusal and invalid request body', { skip: !origin }, async () => {
   assert.equal(denied.value.state, 'denied');
   assert.equal(denied.value.token, undefined);
   assert.equal((await call('POST', '/v2/logins', `Login ${ticket()}`, 'unexpected')).status, 422);
+});
+
+test('login: renewal stops at its absolute limit', { skip: !origin }, async () => {
+  await call('POST', '/__test/mode', undefined, 'authorized');
+  const first = await start(ticket());
+  await new Promise(resolve => setTimeout(resolve, 1100));
+  const approved = await call('POST', `/v2/logins/${first.id}`, first.auth);
+  assert.equal(approved.value.state, 'authorized');
+  const bearer = `Bearer ${approved.value.token}`;
+  assert.equal((await call('POST', '/__test/credential-near-limit', bearer)).value.changed, 1);
+  const renewed = await call('POST', '/v2/session/renew', bearer);
+  assert.equal(renewed.status, 200);
+  assert.ok(renewed.value.expires_at > Date.now() / 1000 + 3 * 86400);
+  assert.ok(renewed.value.expires_at <= Date.now() / 1000 + 4 * 86400);
+  assert.equal((await call('POST', '/v2/session/renew', bearer)).value.expires_at, renewed.value.expires_at);
+  assert.equal((await call('DELETE', '/v2/session', bearer)).status, 200);
 });
 
 test('login: concurrent poll cannot issue two credentials; expiry blocks authorization', { skip: !origin }, async () => {

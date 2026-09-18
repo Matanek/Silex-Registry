@@ -5,6 +5,8 @@ const codePattern = /^[A-Z0-9]{4}-[A-Z0-9]{4}$/;
 const loginPattern = /^[A-Za-z0-9-]{1,39}$/;
 const clientPattern = /^[A-Za-z0-9_]{16,64}$/;
 const devicePattern = /^[a-f0-9]{40}$/;
+const renewalWindow = 89 * 24 * 60 * 60;
+const renewedAccessLifetime = 30 * 24 * 60 * 60;
 
 class LoginFailure extends Error {
   constructor(status, code) { super(code); this.status = status; this.code = code; }
@@ -211,8 +213,8 @@ async function poll(request, env, id, github) {
     const outcome = await env.DB.batch([
       env.DB.prepare("UPDATE probe_login_attempts SET state='consumed',encrypted_device=NULL,user_code=NULL,lease_until=0 WHERE id=? AND state='polling' AND lease_until>?").bind(id, next),
       env.DB.prepare('INSERT INTO probe_identities(github_id,login) VALUES (?,?) ON CONFLICT(github_id) DO UPDATE SET login=excluded.login').bind(result.github_id, result.login),
-      env.DB.prepare("INSERT OR IGNORE INTO probe_credentials(digest,github_id,expires_at,attempt_id) SELECT ?,?,?,id FROM probe_login_attempts WHERE id=? AND state='consumed'")
-        .bind(accessDigest, result.github_id, expires, id),
+      env.DB.prepare("INSERT OR IGNORE INTO probe_credentials(digest,github_id,expires_at,attempt_id,renew_until) SELECT ?,?,?,id,? FROM probe_login_attempts WHERE id=? AND state='consumed'")
+        .bind(accessDigest, result.github_id, expires, expires + renewalWindow, id),
     ]);
     if (outcome[0].meta.changes !== 1 || outcome[2].meta.changes !== 1) return view(await row(env.DB, id), next);
     return { id, state: 'authorized', token: access, expires_at: expires,
@@ -227,16 +229,30 @@ async function session(request, env) {
     await env.DB.prepare('UPDATE probe_credentials SET revoked=1 WHERE digest=?').bind(accessDigest).run();
     return { revoked: true };
   }
-  const current = await env.DB.prepare('SELECT c.github_id,i.login,c.expires_at FROM probe_credentials c JOIN probe_identities i ON i.github_id=c.github_id WHERE c.digest=? AND c.revoked=0 AND c.expires_at>?')
-    .bind(accessDigest, now()).first();
+  const timestamp = now();
+  const current = await env.DB.prepare('SELECT c.github_id,i.login,c.expires_at,c.renew_until FROM probe_credentials c JOIN probe_identities i ON i.github_id=c.github_id WHERE c.digest=? AND c.revoked=0 AND c.expires_at>?')
+    .bind(accessDigest, timestamp).first();
   insist(current, 'unauthorized', 401);
-  return current;
+  if (request.method === 'POST') {
+    insist(current.renew_until > timestamp, 'renewal_expired', 401);
+    const extended = Math.min(timestamp + renewedAccessLifetime, current.renew_until);
+    if (extended > current.expires_at) {
+      await env.DB.prepare('UPDATE probe_credentials SET expires_at=? WHERE digest=? AND revoked=0 AND expires_at>? AND renew_until>=?')
+        .bind(extended, accessDigest, timestamp, extended).run();
+    }
+    const saved = await env.DB.prepare('SELECT expires_at FROM probe_credentials WHERE digest=? AND revoked=0 AND expires_at>?')
+      .bind(accessDigest, timestamp).first();
+    insist(saved, 'unauthorized', 401);
+    current.expires_at = saved.expires_at;
+  }
+  return { github_id: current.github_id, login: current.login, expires_at: current.expires_at };
 }
 export async function loginFetch(request, env, route, github = { begin: githubBegin, poll: githubPoll }) {
   const match = /^\/v2\/logins\/([a-f0-9]{32})$/.exec(route);
   if (!(route === '/v2/logins' && request.method === 'POST') &&
       !(match && request.method === 'POST') &&
-      !(route === '/v2/session' && ['GET', 'DELETE'].includes(request.method))) return null;
+      !(route === '/v2/session' && ['GET', 'DELETE'].includes(request.method)) &&
+      !(route === '/v2/session/renew' && request.method === 'POST')) return null;
   try {
     let value;
     if (route === '/v2/logins') value = await begin(request, env, github);
