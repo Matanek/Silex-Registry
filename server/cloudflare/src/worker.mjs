@@ -544,6 +544,10 @@ export async function workerFetch(request, env) {
       const route = url.pathname;
       const login = await loginFetch(request, env, route);
       if (login) return login;
+      if (route === '/v2/capabilities' && request.method === 'GET') {
+        return Response.json({ protocol: 'silex-registry-v2' },
+          { headers: { 'cache-control': 'no-store' } });
+      }
       if (route === '/__probe/inventory' && request.method === 'GET') {
         insist(await authenticate(request, env) === '__probe__', 'forbidden', 403);
         return Response.json({ objects: await inventory(env, 'probe/objects/sha256/'),

@@ -56,6 +56,9 @@ async function upload(id, hash, bytes, from = 0, chunkSize = Number(process.env.
 }
 
 test('staging probe: hash, resume, immutable versions and shared artifact', { skip: !origin }, async () => {
+  const capabilities = await call('GET', '/v2/capabilities', undefined, false);
+  assert.equal(capabilities.status, 200);
+  assert.deepEqual(capabilities.json, { protocol: 'silex-registry-v2' });
   const stamp = process.env.PROBE_RUN_ID ?? Date.now().toString(36);
   const name = `CloudflareProbe_${stamp}`;
   const shared = Buffer.from(`small shared native boundary ${stamp}\n`);

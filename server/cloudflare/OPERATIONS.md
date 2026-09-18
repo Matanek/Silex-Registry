@@ -7,8 +7,10 @@ public isolé du registre officiel. D1/R2 staging contiennent 155 versions,
 30 noms réservés et 171 objets distincts. Une autre base et un autre bucket,
 `silex-registry-restore-probe`, ont reçu une restauration complète. Aucun DNS
 public du registre n'a été modifié. Le client compatible doit être publié
-avant la bascule : les anciens clients qui lisent les tags Git ne peuvent pas
-installer les versions stockées sur Cloudflare.
+avant la bascule : il continue à utiliser l'index `/v1` tant que la capacité
+`/v2/capabilities` est absente, puis choisit D1/R2 après l'activation.
+Les anciens clients qui lisent les tags Git ne peuvent pas installer les
+versions stockées sur Cloudflare.
 
 ## Préparer et qualifier une destination
 
@@ -26,7 +28,8 @@ installer les versions stockées sur Cloudflare.
    l'origine et le jeton administratifs de cette destination. Rejouer l'import :
    zéro version supplémentaire doit apparaître. Toute collision différente
    doit arrêter la migration.
-4. Vérifier comptes D1, objets R2 et SHA-256 d'une source et d'un gros artefact
+4. Vérifier `GET /v2/capabilities` sans identité, comptes D1, objets R2 et
+   SHA-256 d'une source et d'un gros artefact
    en lecture publique. Installer depuis un magasin Silex vide et compiler un
    consommateur. Publier puis installer deux versions d'un nom de banc, et
    supprimer uniquement cette fixture avec `tests/cleanup-remote.mjs`.
@@ -124,7 +127,11 @@ Consulter les références officielles [Workers](https://developers.cloudflare.c
 
 ## Déploiement et retour arrière
 
-Déployer code et migrations compatibles sans changer le nom public. Sur la
+Déployer code et migrations compatibles sans changer le nom public. La route
+publique `/v2/capabilities` doit répondre exactement avec le protocole
+`silex-registry-v2` avant le changement de domaine ; son absence maintient
+les nouveaux clients sur `/v1`, tandis qu'une erreur réseau arrête la
+résolution. Sur la
 version Worker exacte, répéter lecture, publication, installation, intégrité
 et restauration. Copier le magasin avant la bascule, puis déplacer le routage
 public seulement après accord sur le client, le service et le DNS. Garder
