@@ -537,6 +537,27 @@ async function publicRead(request, env, name, version, target, artifact) {
     'content-encoding': 'identity', 'cache-control': 'no-transform', etag: `"${blob.sha256}"`,
   } });
 }
+async function publicCatalog(env) {
+  const latest = new Map();
+  let offset = 0;
+  while (true) {
+    const { results } = await env.DB.prepare('SELECT name,version,descriptor FROM probe_versions ORDER BY name,version LIMIT 500 OFFSET ?')
+      .bind(offset).all();
+    for (const row of results) {
+      const prior = latest.get(row.name);
+      if (!prior || compareVersions(parseVersion(row.version), parseVersion(prior.version)) > 0) latest.set(row.name, row);
+    }
+    if (results.length < 500) break;
+    offset += results.length;
+  }
+  const packages = [...latest.values()].sort((a, b) => a.name.localeCompare(b.name, 'en')).map(row => {
+    const manifest = JSON.parse(JSON.parse(row.descriptor).manifest);
+    return { name: row.name, description: manifest.description ?? row.name,
+      ...(manifest.repository ? { repository: manifest.repository } : {}) };
+  });
+  return Response.json({ schema: 1, packages }, { headers: { 'cache-control': 'public, max-age=60',
+    'x-content-type-options': 'nosniff' } });
+}
 export async function workerFetch(request, env) {
     try {
       const url = new URL(request.url);
@@ -548,6 +569,7 @@ export async function workerFetch(request, env) {
         return Response.json({ protocol: 'silex-registry-v2' },
           { headers: { 'cache-control': 'no-store' } });
       }
+      if (route === '/v2/catalog' && request.method === 'GET') return await publicCatalog(env);
       if (route === '/__probe/inventory' && request.method === 'GET') {
         insist(await authenticate(request, env) === '__probe__', 'forbidden', 403);
         return Response.json({ objects: await inventory(env, 'probe/objects/sha256/'),
