@@ -6,7 +6,15 @@ Le Worker `silex-registry-staging-probe.silex-lang.workers.dev` est un banc
 public isolé du registre officiel. D1/R2 staging contiennent 155 versions,
 30 noms réservés et 171 objets distincts. Une autre base et un autre bucket,
 `silex-registry-restore-probe`, ont reçu une restauration complète. Aucun DNS
-public du registre n'a été modifié. Le client compatible doit être publié
+public du registre n'a été modifié. L'instance de production distincte
+`silex-registry.silex-lang.workers.dev` emploie `wrangler.production.toml`,
+la base D1 et le bucket R2 `silex-registry`. Elle a reçu les 155 versions,
+30 noms et 171 objets depuis une sauvegarde vérifiée ; son adresse
+`workers.dev` sert aux contrôles avant le domaine officiel. La lecture de
+STD et de l'artefact SDL, l'installation puis l'exécution d'un consommateur
+ont réussi. Une copie complète de cette instance est conservée dans
+`Backups/Silex-Registry/cloudflare-production-precutover-20260918T0720Z`.
+Le client compatible doit être publié
 avant la bascule : il continue à utiliser l'index `/v1` tant que la capacité
 `/v2/capabilities` est absente, puis choisit D1/R2 après l'activation.
 Les anciens clients qui lisent les tags Git ne peuvent pas installer les
@@ -126,6 +134,30 @@ Consulter les références officielles [Workers](https://developers.cloudflare.c
 [R2](https://developers.cloudflare.com/r2/pricing/) avant l'activation.
 
 ## Déploiement et retour arrière
+
+### Domaine officiel
+
+Au 18 septembre 2026, les serveurs DNS autoritaires de `silex-lang.org` sont
+chez OVH et `registry.silex-lang.org` pointe encore vers la VPS. Aucun
+Custom Domain Workers ne peut être activé sur ce compte sans zone Cloudflare
+active. Le DNS partiel qui conserve OVH comme autorité requiert Business ou
+Enterprise ; la délégation d'un sous-domaine à Cloudflare requiert Enterprise.
+Sur l'offre gratuite, préparer une zone complète `silex-lang.org` chez
+Cloudflare, puis remplacer les serveurs de noms du domaine après vérification.
+Voir les [Custom Domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/),
+les [configurations DNS](https://developers.cloudflare.com/dns/zone-setups/),
+le [DNS partiel](https://developers.cloudflare.com/dns/zone-setups/partial-setup/setup/)
+et la [délégation](https://developers.cloudflare.com/dns/zone-setups/subdomain-setup/setup/).
+
+Obtenir d'abord l'export complet de la zone OVH. Copier dans la zone
+Cloudflare, sans en omettre, les enregistrements du site, de la messagerie,
+des vérifications et des autres services. Comparer les deux zones avant toute
+délégation. Relier ensuite `registry.silex-lang.org` au Worker de production
+et contrôler le certificat, les lectures, la publication et les autres
+services du domaine. Désactiver `workers_dev` après la qualification du domaine.
+Un retour aux anciens serveurs de noms après une nouvelle publication
+Cloudflare masquerait cette version ; privilégier un Worker compatible ou une
+restauration sur Cloudflare.
 
 Déployer code et migrations compatibles sans changer le nom public. La route
 publique `/v2/capabilities` doit répondre exactement avec le protocole

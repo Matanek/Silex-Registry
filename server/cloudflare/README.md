@@ -59,10 +59,12 @@ relais avec `PROBE_UPSTREAM` fixé exactement à cette URL ; employer ensuite
 `PROBE_ORIGIN=http://127.0.0.1:8793` pour le test CLI. Le relais n'est pas un
 composant du registre et ne doit pas être utilisé comme origine produit.
 
-Le service n'est actuellement déployé qu'en staging. Le corpus historique et
-son artefact SDL de 51 047 580 octets ont été lus sur ce Worker réel, et une
-copie complète a été restaurée dans des ressources Cloudflare distinctes.
-Les quotas et coûts de production demandent encore une surveillance réelle.
+Le staging reste isolé. Une instance distincte est déployée sur
+`https://silex-registry.silex-lang.workers.dev` avec
+`wrangler.production.toml`, avant son rattachement au domaine officiel.
+Le corpus historique et son artefact SDL de 51 047 580 octets ont été lus sur
+les Workers réels. Les quotas et coûts de production demandent encore une
+surveillance réelle.
 
 Avant tout import historique, `admin/validate-bundle.mjs BUNDLE PLAN OWNERS`
 contrôle en lecture seule l'ordre des 155 versions, les preuves de propriété,

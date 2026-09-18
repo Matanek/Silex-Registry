@@ -1,0 +1,20 @@
+# Instance de production distincte du staging. workers.dev sert à la qualification
+# préalable ; le domaine officiel sera ajouté après validation du DNS.
+name = "silex-registry"
+main = "src/worker.mjs"
+compatibility_date = "2026-09-17"
+workers_dev = true
+account_id = "99527982b858a931d1a2f7a4bcc7b49d"
+
+[vars]
+GITHUB_CLIENT_ID = "Ov23liijZ3iMXfwe7qnz"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "silex-registry"
+database_id = "b4068e5b-7353-494c-bb44-ac1236e3481f"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "OBJECTS"
+bucket_name = "silex-registry"
