@@ -14,9 +14,9 @@ la base D1 et le bucket R2 `silex-registry`. Elle a reçu les 155 versions,
 STD et de l'artefact SDL, l'installation puis l'exécution d'un consommateur
 ont réussi. Une copie complète de cette instance est conservée dans
 `Backups/Silex-Registry/cloudflare-production-precutover-20260918T0720Z`.
-Le client compatible doit être publié
-avant la bascule : il continue à utiliser l'index `/v1` tant que la capacité
-`/v2/capabilities` est absente, puis choisit D1/R2 après l'activation.
+Le client compatible Silex `0.45.0` est publié. Il utilisait l'index `/v1`
+tant que la capacité `/v2/capabilities` était absente et choisit D1/R2 depuis
+l'activation du domaine officiel.
 Les anciens clients qui lisent les tags Git ne peuvent pas installer les
 versions stockées sur Cloudflare.
 
@@ -137,36 +137,38 @@ Consulter les références officielles [Workers](https://developers.cloudflare.c
 
 ### Domaine officiel
 
-Au 18 septembre 2026, les serveurs DNS autoritaires de `silex-lang.org` sont
-chez OVH et `registry.silex-lang.org` pointe encore vers la VPS. Aucun
-Custom Domain Workers ne peut être activé sur ce compte sans zone Cloudflare
-active. Le DNS partiel qui conserve OVH comme autorité requiert Business ou
+Depuis le 18 septembre 2026, les serveurs DNS autoritaires de
+`silex-lang.org` sont `clayton.ns.cloudflare.com` et
+`irma.ns.cloudflare.com`. La zone Cloudflare est active. L'ancien A
+`registry` vers `92.222.25.45` a été retiré, puis Wrangler a attaché
+`registry.silex-lang.org` au Worker de production par Custom Domain. Le
+certificat HTTPS est valide et `/v2/capabilities` retourne
+`silex-registry-v2`. L'apex du site garde son A vers la VPS en DNS only ; les
+trois MX OVH et le SPF ont été préservés. DNSSEC est encore à réactiver sur
+la nouvelle autorité et chez OVH.
+
+Le DNS partiel qui conserverait OVH comme autorité requiert Business ou
 Enterprise ; la délégation d'un sous-domaine à Cloudflare requiert Enterprise.
-Sur l'offre gratuite, préparer une zone complète `silex-lang.org` chez
-Cloudflare, puis remplacer les serveurs de noms du domaine après vérification.
+La zone complète active permet le Custom Domain sur l'offre gratuite.
 Voir les [Custom Domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/),
 les [configurations DNS](https://developers.cloudflare.com/dns/zone-setups/),
 le [DNS partiel](https://developers.cloudflare.com/dns/zone-setups/partial-setup/setup/)
 et la [délégation](https://developers.cloudflare.com/dns/zone-setups/subdomain-setup/setup/).
 
-Obtenir d'abord l'export complet de la zone OVH. Copier dans la zone
-Cloudflare, sans en omettre, les enregistrements du site, de la messagerie,
-des vérifications et des autres services. Comparer les deux zones avant toute
-délégation. Relier ensuite `registry.silex-lang.org` au Worker de production
-et contrôler le certificat, les lectures, la publication et les autres
-services du domaine. Désactiver `workers_dev` après la qualification du domaine.
+L'inventaire OVH de huit entrées a servi à copier les six entrées de service
+dans Cloudflare avant la délégation. La lecture anonyme de `STD@0.22.0` depuis
+le domaine officiel a réussi avec Silex `0.45.0` ; qualifier encore la
+publication d'auteur et l'exploitation avant de désactiver `workers_dev`.
 Un retour aux anciens serveurs de noms après une nouvelle publication
 Cloudflare masquerait cette version ; privilégier un Worker compatible ou une
 restauration sur Cloudflare.
 
 Déployer code et migrations compatibles sans changer le nom public. La route
-publique `/v2/capabilities` doit répondre exactement avec le protocole
-`silex-registry-v2` avant le changement de domaine ; son absence maintient
-les nouveaux clients sur `/v1`, tandis qu'une erreur réseau arrête la
-résolution. Sur la
-version Worker exacte, répéter lecture, publication, installation, intégrité
-et restauration. Copier le magasin avant la bascule, puis déplacer le routage
-public seulement après accord sur le client, le service et le DNS. Garder
+publique `/v2/capabilities` répond avec le protocole
+`silex-registry-v2` ; son absence sur l'ancien serveur maintenait les nouveaux
+clients sur `/v1`, tandis qu'une erreur réseau arrêtait la résolution.
+Sur la version Worker exacte, répéter lecture, publication, installation,
+intégrité et restauration. Une copie du magasin a précédé la bascule. Garder
 la VPS et ses sauvegardes indépendantes pendant l'observation initiale.
 
 Un Worker antérieur ne peut être réactivé que s'il lit le schéma D1 et les
