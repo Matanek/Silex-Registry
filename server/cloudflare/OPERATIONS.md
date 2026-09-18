@@ -99,11 +99,18 @@ les allocations publiées. Les captures du tableau de bord fournies le
 facturable, 3,56 milliers d'opérations A, 9,86 milliers d'opérations B et
 288,94 Mo de stockage total. La page D1 affiche aussi 0,00 $ d'usage
 facturable, 430,65 milliers de lignes lues, 9,11 milliers écrites et
-4,06 Mo de stockage total, avec deux bases sur dix permises. L'analytique
+4,06 Mo de stockage total, avec deux bases sur dix permises. Cette limite de
+dix bases indique le forfait Workers Free selon les
+[limites D1](https://developers.cloudflare.com/d1/platform/limits/) ; c'est
+une déduction de la capture, qui ne nomme pas directement le forfait.
+L'analytique
 Workers sur 24 heures indique environ 6,94 milliers d'invocations, zéro
-erreur et un P90 CPU de 5 ms. Ces vues ne prouvent ni un coût total de compte
-nul ni le forfait Workers applicable ; vérifier ce forfait et la dépense
-globale avant la bascule.
+erreur et un P90 CPU de 5 ms. Le forfait Workers Free ne comporte pas de frais
+fixes selon les [tarifs Workers](https://developers.cloudflare.com/workers/platform/pricing/).
+Les captures étayent donc l'absence d'usage facturable du registre dans les
+vues D1/R2 et l'application probable du forfait gratuit Workers. Elles ne
+constituent pas une facture globale du compte ni une garantie pour le trafic
+futur ; contrôler la facturation et les quotas au moment de la bascule.
 
 La même capture R2 affiche 264 objets dans le bucket de staging. Un inventaire
 complet du bucket, lu ensuite par un Worker local éphémère avec binding R2 réel,
