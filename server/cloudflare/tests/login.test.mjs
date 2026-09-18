@@ -51,6 +51,7 @@ test('login: ticket isolation, pending, identity, replay and revocation', { skip
   assert.deepEqual(Object.keys(session.value).sort(), ['expires_at', 'github_id', 'login']);
   assert.ok(session.value.expires_at > Date.now() / 1000 + 23 * 60 * 60);
   assert.ok(session.value.expires_at < Date.now() / 1000 + 25 * 60 * 60);
+  assert.equal((await call('POST', '/__test/credential-unmigrated', bearer)).value.changed, 1);
   const renewed = await call('POST', '/v2/session/renew', bearer);
   assert.equal(renewed.status, 200, JSON.stringify(renewed.value));
   assert.equal(renewed.value.github_id, session.value.github_id);

@@ -30,14 +30,18 @@ export default {
       await env.DB.prepare('UPDATE probe_login_attempts SET expires_at=0 WHERE id=?').bind(expire[1]).run();
       return Response.json({ expired: true });
     }
-    if (url.pathname === '/__test/credential-near-limit' && request.method === 'POST') {
+    if (['/__test/credential-near-limit', '/__test/credential-unmigrated'].includes(url.pathname) &&
+        request.method === 'POST') {
       const match = /^Bearer ([a-f0-9]{64})$/.exec(request.headers.get('authorization') ?? '');
       if (!match) return new Response(null, { status: 401 });
       const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(match[1]))),
         byte => byte.toString(16).padStart(2, '0')).join('');
       const timestamp = Math.floor(Date.now() / 1000);
-      const result = await env.DB.prepare('UPDATE probe_credentials SET expires_at=?,renew_until=? WHERE digest=? AND revoked=0')
-        .bind(timestamp + 2 * 86400, timestamp + 4 * 86400, digest).run();
+      const result = url.pathname === '/__test/credential-unmigrated'
+        ? await env.DB.prepare('UPDATE probe_credentials SET renew_until=NULL WHERE digest=? AND revoked=0')
+          .bind(digest).run()
+        : await env.DB.prepare('UPDATE probe_credentials SET expires_at=?,renew_until=? WHERE digest=? AND revoked=0')
+          .bind(timestamp + 2 * 86400, timestamp + 4 * 86400, digest).run();
       return Response.json({ changed: result.meta.changes });
     }
     const response = await loginFetch(request, env, url.pathname, github);

@@ -234,6 +234,14 @@ async function session(request, env) {
     .bind(accessDigest, timestamp).first();
   insist(current, 'unauthorized', 401);
   if (request.method === 'POST') {
+    // A 0.45.0 Worker may issue a credential between the D1 migration and
+    // deployment of this Worker. Give that credential the same bounded window.
+    if (current.renew_until === null) {
+      const limit = current.expires_at + renewalWindow;
+      await env.DB.prepare('UPDATE probe_credentials SET renew_until=? WHERE digest=? AND renew_until IS NULL')
+        .bind(limit, accessDigest).run();
+      current.renew_until = limit;
+    }
     insist(current.renew_until > timestamp, 'renewal_expired', 401);
     const extended = Math.min(timestamp + renewedAccessLifetime, current.renew_until);
     if (extended > current.expires_at) {
