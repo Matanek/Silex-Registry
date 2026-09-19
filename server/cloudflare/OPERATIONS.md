@@ -4,16 +4,15 @@
 
 Le Worker `silex-registry-staging-probe.silex-lang.workers.dev` est un banc
 public isolé du registre officiel. D1/R2 staging contiennent 155 versions,
-30 noms réservés et 171 objets distincts. Une autre base et un autre bucket,
-`silex-registry-restore-probe`, ont reçu une restauration complète. Aucun DNS
-public du registre n'a été modifié. L'instance de production distincte
+30 noms réservés et 171 objets distincts. L'instance de production distincte
 `silex-registry.silex-lang.workers.dev` emploie `wrangler.production.toml`,
 la base D1 et le bucket R2 `silex-registry`. Elle a reçu les 155 versions,
 30 noms et 171 objets depuis une sauvegarde vérifiée ; son adresse
 `workers.dev` sert aux contrôles avant le domaine officiel. La lecture de
 STD et de l'artefact SDL, l'installation puis l'exécution d'un consommateur
-ont réussi. Une copie complète de cette instance est conservée dans
-`Backups/Silex-Registry/cloudflare-production-precutover-20260918T0720Z`.
+ont réussi. La copie locale
+`Backups/Silex-Registry/cloudflare-production-precutover-20260918T0720Z` est
+un témoin historique de la bascule ; l'exploitation courante n'en dépend pas.
 Le client compatible Silex `0.45.0` est publié. Il utilisait l'index `/v1`
 tant que la capacité `/v2/capabilities` était absente et choisit D1/R2 depuis
 l'activation du domaine officiel.
@@ -25,7 +24,7 @@ versions stockées sur Cloudflare.
 1. Créer Worker, base D1 et bucket R2 dédiés. Copier
    `wrangler.production.example.toml`, renseigner les identifiants et choisir
    le routage public seulement au moment autorisé. Ne jamais restaurer dans
-   le staging ou dans un service actif. Appliquer les trois migrations D1 à
+   le staging ou dans un service actif. Appliquer les cinq migrations D1 à
    la base vide.
 2. Poser `LOGIN_KEY_B64` et `MAINTENANCE_TOKEN_SHA256` via les secrets Wrangler,
    hors de Git et des copies. Le second est le SHA-256 d'un jeton aléatoire de
@@ -48,43 +47,51 @@ octet actuel ne peut remplacer ces objets sans preuve d'identité.
 
 ## Copies et reprise
 
-`admin/export-store.mjs` crée un nouveau dossier sous
-`SilexProject/Backups/Silex-Registry`. Il relit les métadonnées D1 au début et
-à la fin, contrôle chaque objet par taille et SHA-256 et refuse une copie
-prise pendant une modification visible. La copie comprend versions, noms et
-droits. Elle exclut jetons, clés de connexion, sessions et fragments d'upload.
-Conserver plusieurs copies datées et une copie hors du compte Cloudflare,
-avec accès restreint et support chiffré : elles contiennent du code d'auteurs
-et des identifiants. Vérifier chaque copie et tester périodiquement sa
-restauration.
+Le registre de production copie chaque publication vers le bucket privé
+Backblaze B2 `silex-registry-backup-99527982`, sous `registry/production`.
+Les objets binaires sont adressés par SHA-256 ; les descripteurs de publication
+et un instantané déterministe des propriétaires et versions complètent la
+copie. Chaque envoi porte son checksum S3, emploie le chiffrement serveur AES256
+et reçoit une rétention Object Lock en mode Governance de 90 jours. Une
+publication n'est rendue visible qu'après l'enregistrement de ses éléments
+dans la file Cloudflare `silex-registry-backup`.
 
-`admin/restore-backup.mjs` revérifie la copie et la restaure seulement dans
-une base D1 vide et un bucket R2 distincts. Le Worker lié à cette destination
-pose les métadonnées SHA-256 requises par la lecture R2. Comparer ensuite
-l'inventaire et les condensats, installer un package depuis un magasin vide,
-puis refaire une connexion auteur avant une nouvelle publication. Les accès
-anciens ne sont pas restaurés ; les droits restent attachés aux identifiants
-GitHub stables. En cas de perte du compte, créer des ressources dans un compte
-autorisé, restaurer la dernière copie hors compte, recréer les secrets et
-qualifier la nouvelle instance avant de déplacer le DNS. La perte maximale
-de données dépend de l'âge de la dernière copie valide.
+Le consommateur de cette file relit les octets depuis R2 et les métadonnées
+depuis D1, écrit B2, puis vérifie taille et SHA-256 par `HEAD` avant
+d'acquitter le message. Les échecs sont rejoués et finissent dans
+`silex-registry-backup-dead` après dix tentatives. Le cron Cloudflare
+`15 3 * * *` produit un nouvel instantané et supprime les sessions d'upload
+expirées. Aucune machine personnelle, tâche `launchd` ou copie locale n'est
+requise pour cette maintenance.
 
-Programmer `admin/run-maintenance.mjs` quotidiennement après activation, avec
-`--apply-retention`, depuis une machine dont le compte Cloudflare et le
-dossier de copies restent accessibles. Elle effectue la copie vérifiée avant
-la purge, garde les trente dernières copies automatiques et un point par mois
-sur les douze derniers mois, puis émet un reçu JSON. Seuls les dossiers
-`cloudflare-auto-*` marqués comme complets peuvent être supprimés ; les copies
-manuelles et anciennes VPS restent intactes. Contrôler la sortie et alerter
-sur toute fin non nulle ou absence de copie quotidienne. Tester une
-restauration périodique et transférer une copie hors du compte. Le script est
-qualifié localement ; aucun calendrier système n'est encore activé.
+`admin/restore-b2.mjs --remote DATABASE BUCKET CONFIG` choisit le dernier
+instantané valide d'un préfixe B2, télécharge chaque objet dans un dossier
+temporaire, contrôle taille, SHA-256, archives source et dépendances, puis
+restaure uniquement vers une base D1 et un bucket R2 vides. Fournir
+`B2_ENDPOINT`, `B2_BUCKET`, `B2_PREFIX`, `B2_APPLICATION_KEY_ID`,
+`B2_APPLICATION_KEY`, `REGISTRY_ADMIN_ORIGIN` et
+`REGISTRY_MAINTENANCE_TOKEN` hors de Git. Comparer ensuite l'inventaire,
+télécharger une source publique et refaire une connexion auteur avant toute
+bascule DNS. Les sessions de connexion ne sont pas sauvegardées ; les droits
+de noms restent attachés aux identifiants GitHub stables.
+
+La qualification du 19 septembre 2026 a copié 171 objets pour 288 930 458
+octets, 155 publications et 30 propriétaires dans B2. Une restauration dans
+des ressources Cloudflare neuves a recréé exactement ces comptes ; la source
+`STD@0.22.0` relue depuis le Worker restauré avait la taille et le SHA-256
+attendus. Les ressources de restauration ont ensuite été supprimées. Le
+préfixe staging reste conservé par Object Lock comme preuve de qualification,
+mais `BACKUP_REQUIRED=0` y empêche toute croissance future.
+
+`admin/export-store.mjs` et `admin/restore-backup.mjs` restent disponibles pour
+une copie manuelle ponctuelle. Ils ne participent plus à la continuité du
+service et ne doivent pas être planifiés sur un poste personnel.
 
 ## Rétention, surveillance et coûts
 
-Les sessions sont reprenables sept jours. Exécuter
-`admin/prune-sessions.mjs` quotidiennement pour supprimer après huit jours
-les fragments R2 avant les lignes D1 ; ne jamais viser les objets canoniques.
+Les sessions sont reprenables sept jours. Le cron Worker supprime après huit
+jours les fragments R2 avant les lignes D1 ; il ne vise jamais les objets
+canoniques.
 Surveiller les 5xx, erreurs de connexion GitHub, publications refusées,
 sessions bloquées, latence des gros objets, occupation D1/R2, opérations et
 coût facturé. Alerter sur les copies ou purges en échec, les fragments trop
@@ -93,9 +100,10 @@ anciens, la hausse durable des 5xx et l'approche des quotas.
 Le corpus représente 288 930 458 octets d'objets uniques, hors sessions et
 croissance. L'artefact SDL de 51 047 580 octets exerce la voie des gros
 objets. Relever dans le compte cible le plan, les quotas Workers/D1/R2 et
-les lectures/écritures avant la bascule. Les allocations gratuites ne sont
-pas un plafond de facturation : fixer une alerte de dépense et vérifier les
-conditions actuelles du plan. Aucun upgrade payant n'est implicite.
+les lectures/écritures avant la bascule. Le Worker refuse une nouvelle
+publication si le volume logique unique dépasserait 8 Gio, afin de garder une
+marge sous les 10 Go gratuits de B2. Ce garde-fou ne remplace pas les plafonds
+et alertes du compte Backblaze. Aucun upgrade payant n'est implicite.
 À la fin des essais, l'inventaire direct du Worker de staging trouve 171 objets
 canoniques pour 288 930 458 octets et aucun fragment d'upload ;
 D1 occupe 2 023 424 octets. La restauration garde une seconde copie R2 du
@@ -144,8 +152,8 @@ Depuis le 18 septembre 2026, les serveurs DNS autoritaires de
 `registry.silex-lang.org` au Worker de production par Custom Domain. Le
 certificat HTTPS est valide et `/v2/capabilities` retourne
 `silex-registry-v2`. L'apex du site garde son A vers la VPS en DNS only ; les
-trois MX OVH et le SPF ont été préservés. DNSSEC est encore à réactiver sur
-la nouvelle autorité et chez OVH.
+trois MX OVH et le SPF ont été préservés. DNSSEC est actif chez Cloudflare et
+le DS correspondant est actif chez OVH.
 
 Le DNS partiel qui conserverait OVH comme autorité requiert Business ou
 Enterprise ; la délégation d'un sous-domaine à Cloudflare requiert Enterprise.
@@ -157,8 +165,8 @@ et la [délégation](https://developers.cloudflare.com/dns/zone-setups/subdomain
 
 L'inventaire OVH de huit entrées a servi à copier les six entrées de service
 dans Cloudflare avant la délégation. La lecture anonyme de `STD@0.22.0` depuis
-le domaine officiel a réussi avec Silex `0.45.0` ; qualifier encore la
-publication d'auteur et l'exploitation avant de désactiver `workers_dev`.
+le domaine officiel a réussi avec Silex `0.45.0`. La publication d'auteur,
+la copie B2 et une restauration complète ont aussi été qualifiées.
 Un retour aux anciens serveurs de noms après une nouvelle publication
 Cloudflare masquerait cette version ; privilégier un Worker compatible ou une
 restauration sur Cloudflare.

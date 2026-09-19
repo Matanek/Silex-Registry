@@ -1,6 +1,9 @@
 import { loginFetch } from './login.mjs';
 import { inspectProvenance, ProvenanceFailure } from './provenance.mjs';
 import { ArchiveFailure, maxExpanded, verifySourceArchive } from './archive.mjs';
+import { BackupFailure } from './backup.mjs';
+import { backupStatus, consumeBackupBatch, enqueuePublicationBackup,
+  runScheduledMaintenance, seedExternalBackup } from './maintenance.mjs';
 
 const encoder = new TextEncoder();
 const sha = /^[a-f0-9]{64}$/;
@@ -500,6 +503,9 @@ async function finalize(request, env, row) {
       insist(versions.results.some(found => acceptsDependency(String(constraint), found.version)),
       'missing_dependency', 409);
     }
+    // Queue every immutable byte and the publication record before making the version public.
+    // The queue write is durably confirmed by Cloudflare when this promise resolves.
+    await enqueuePublicationBackup(env, row, value);
     probeFault(request, env, 'before_visibility');
     // The single row is the public visibility boundary. R2 has already confirmed every object.
     await env.DB.batch([
@@ -579,6 +585,16 @@ export async function workerFetch(request, env) {
       if (admin && request.method === 'GET') return await maintenance(request, env, admin[1]);
       const administrativeBlob = /^\/v2\/admin\/objects\/([a-f0-9]{64})$/.exec(route);
       if (administrativeBlob) return await administrativeObject(request, env, administrativeBlob[1]);
+      if (route === '/v2/admin/backups/seed' && request.method === 'POST') {
+        await authenticateMaintenance(request, env);
+        return Response.json(await seedExternalBackup(env),
+          { headers: { 'cache-control': 'no-store' } });
+      }
+      if (route === '/v2/admin/backups/status' && request.method === 'GET') {
+        await authenticateMaintenance(request, env);
+        return Response.json(await backupStatus(env),
+          { headers: { 'cache-control': 'no-store' } });
+      }
       if (route === '/v2/publications' && request.method === 'POST') {
         return Response.json(await create(request, env, await authenticate(request, env)));
       }
@@ -607,10 +623,15 @@ export async function workerFetch(request, env) {
       }
       throw new Rejection(404, 'route_not_found');
     } catch (error) {
-      const status = error instanceof Rejection || error instanceof ProvenanceFailure ? error.status : 503;
-      const code = error instanceof Rejection || error instanceof ProvenanceFailure ? error.code : 'storage_unavailable';
+      const expected = error instanceof Rejection || error instanceof ProvenanceFailure || error instanceof BackupFailure;
+      const status = expected ? error.status : 503;
+      const code = expected ? error.code : 'storage_unavailable';
       return Response.json({ error: code, message: code.replaceAll('_', ' '), retryable: [429, 503, 507].includes(status) },
         { status, headers: { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
     }
 }
-export default { fetch(request, env) { return workerFetch(request, env); } };
+export default {
+  fetch(request, env) { return workerFetch(request, env); },
+  queue(batch, env) { return consumeBackupBatch(batch, env); },
+  scheduled(controller, env, ctx) { ctx.waitUntil(runScheduledMaintenance(env)); },
+};

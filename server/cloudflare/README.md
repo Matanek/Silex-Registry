@@ -90,14 +90,29 @@ un état Wrangler temporaire et vérifie le refus d'un objet altéré.
 copie les lignes publiques D1 et chaque objet R2 référencé vers un nouveau
 dossier. Chaque taille, SHA-256 et archive source est vérifié ; l'export échoue
 si les métadonnées D1 changent entre le début et la fin. La copie n'inclut ni
-jeton, ni clé de connexion, ni session d'upload. La destination prévue pour les
-copies réelles est `SilexProject/Backups/Silex-Registry`.
+jeton, ni clé de connexion, ni session d'upload. Cet export manuel sert à un
+diagnostic ou à une migration ponctuelle ; la sauvegarde d'exploitation est
+la copie B2 décrite ci-dessous.
 
 `admin/restore-backup.mjs BACKUP --local|--remote DATABASE BUCKET CONFIG`
 revérifie la copie puis restaure vers une base D1 vide. Employer une base et un
 bucket R2 distincts du service source. Le test local restaure la copie dans un
 second état Wrangler isolé et refuse une nouvelle restauration vers cet état
 déjà rempli.
+
+La continuité courante utilise Backblaze B2 plutôt que le disque d'une machine.
+La production envoie par Cloudflare Queue les objets SHA-256, les publications
+et les instantanés de métadonnées sous `registry/production`. Les écritures B2
+sont chiffrées, contrôlées par checksum et protégées 90 jours par Object Lock.
+Le volume logique accepté est borné à 8 Gio. Le staging a servi à la
+qualification complète, puis `BACKUP_REQUIRED=0` y a arrêté les nouvelles
+copies.
+
+`admin/restore-b2.mjs --local|--remote DATABASE BUCKET CONFIG` télécharge le
+dernier instantané du préfixe indiqué par `B2_PREFIX`, vérifie tous les objets
+et archives, puis exige une destination vide. Les identifiants B2, l'origine du
+Worker de destination et son jeton administratif sont fournis par variables
+d'environnement et ne sont jamais écrits dans Git.
 
 Une session de publication reste reprenable pendant sept jours depuis sa
 création. Après huit jours, `admin/prune-sessions.mjs ORIGIN --local|--remote
@@ -110,9 +125,7 @@ fragments. Les objets canoniques publiés ne sont jamais visés par cette purge.
 La [procédure d'exploitation](OPERATIONS.md) décrit la bascule, les copies,
 les alertes et le retour arrière avant toute activation publique.
 
-`admin/run-maintenance.mjs --remote DATABASE BUCKET CONFIG ORIGIN BACKUP_ROOT
---plan-retention` compose une copie vérifiée, la purge des sessions expirées
-et un plan de rétention. `--apply-retention` supprime uniquement ses copies
-automatiques terminées hors des trente plus récentes et des douze derniers
-points mensuels. Le jeton vient de `REGISTRY_MAINTENANCE_TOKEN` ; la routine
-échoue sans le secret et ne doit être planifiée qu'après la bascule qualifiée.
+Le Worker de production porte le cron quotidien de purge des sessions et de
+création d'instantané B2. `admin/run-maintenance.mjs` reste un outil manuel de
+diagnostic et de copie locale ; il ne doit pas être planifié sur un Mac ou une
+machine d'administrateur.
