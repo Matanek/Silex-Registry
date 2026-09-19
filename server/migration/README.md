@@ -122,10 +122,10 @@ réauthentification ; les expirés suivent la collecte habituelle.
 Ces instantanés privés peuvent contenir une clé de login et des données d'identité.
 Ne pas les publier ni les placer dans un dépôt Git. Leurs fichiers sont en 0600,
 leurs répertoires en 0700. Avant une exploitation réelle, choisir explicitement
-une destination hors VPS, le chiffrement, la garde des clés, la fréquence, la
-rétention et les alertes d'échec. Une copie locale de qualification ne constitue
-pas à elle seule cette politique opérationnelle. Aucun service payant n'est choisi
-ou configuré par ces outils.
+une destination distincte du service, le chiffrement, la garde des clés, la
+fréquence, la rétention et les alertes d'échec. Une copie locale de qualification
+ne constitue pas à elle seule cette politique opérationnelle. Aucun service payant
+n'est choisi ou configuré par ces outils.
 
 `copy-snapshot.mjs` transporte un instantané déjà créé vers une nouvelle
 destination locale, soit depuis un chemin local, soit depuis SSH. L'empreinte
@@ -155,11 +155,6 @@ compare les installations anonymes des témoins STD/JSON/GFX pour les six cibles
 avec Git et les téléchargements d'origine désactivés. Il ne lance pas leurs
 binaires natifs.
 
-Sur le staging VPS explicitement autorisé, `server/staging/migration.sh` emploie
-`migration-input/{bundle,owners.json}` et `migration-work/{data,snapshot,restored}`
-sous `/var/lib/silex-registry-stage`. Ces chemins sont distincts de `data/` et du
-registre public. L'entrée doit appartenir à root et être lisible par le compte de
-staging ; le runtime reçoit seulement cette entrée en lecture seule, le code
-déployé en lecture seule et le répertoire de qualification en écriture, sans
-réseau. Les actions sont `init`, `import data <sélections>`, `snapshot`,
-`verify <empreinte>`, `restore <empreinte>` et `import restored <sélections>`.
+Les scripts d'exploitation de l'ancien hébergement ont été retirés du dépôt
+public après la migration. Les outils de ce dossier restent limités à la
+validation et au transport contrôlé des instantanés historiques.

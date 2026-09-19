@@ -18,11 +18,10 @@ The deployment and recovery checks are in
 ## Historical v1 registry
 
 The former registry mapped names to canonical GitHub repositories; tagged repository
-commits supplied its versions. [CONTRIBUTING.md](CONTRIBUTING.md),
-`registry/v1`, `scripts/build-registry.mjs`, and [deploy](deploy/README.md)
-describe that legacy protocol and its VPS deployment. They are preserved for
-migration and existing clients. Running an index build or deploying code must
-never delete the D1/R2 objects of the candidate service.
+commits supplied its versions. [CONTRIBUTING.md](CONTRIBUTING.md), `registry/v1`
+and `scripts/build-registry.mjs` preserve the legacy data format for migration
+and existing clients. Obsolete hosting configurations are intentionally absent
+from this public repository.
 
 The earlier PHP/SQLite durable-store prototype remains under [server](server/README.md)
 as historical migration evidence; it is not the Cloudflare production route.

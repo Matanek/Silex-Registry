@@ -1,42 +1,39 @@
-# Copier et renseigner les ressources dédiées avant toute mise en service.
-# Ce modèle ne configure aucun domaine et ne porte aucun secret ni jeton de banc.
-name = "silex-registry"
+# Copier vers wrangler.toml et renseigner les ressources d'un banc isolé.
+# Le fichier réel est ignoré par Git.
+name = "REPLACE_WITH_STAGING_WORKER"
 main = "src/worker.mjs"
 compatibility_date = "2026-09-17"
-workers_dev = false
+workers_dev = true
 account_id = "REPLACE_WITH_ACCOUNT_ID"
 
 [vars]
 GITHUB_CLIENT_ID = "REPLACE_WITH_GITHUB_CLIENT_ID"
-BACKUP_REQUIRED = "1"
+BACKUP_REQUIRED = "0"
 BACKUP_ENDPOINT = "https://s3.REPLACE_WITH_B2_REGION.backblazeb2.com"
 BACKUP_BUCKET = "REPLACE_WITH_PRIVATE_B2_BUCKET"
-BACKUP_PREFIX = "registry/production"
+BACKUP_PREFIX = "registry/staging"
 BACKUP_LIMIT_BYTES = "8589934592"
 BACKUP_RETENTION_DAYS = "90"
 
-[triggers]
-crons = [ "15 3 * * *" ]
-
 [[queues.producers]]
 binding = "BACKUP_QUEUE"
-queue = "REPLACE_WITH_BACKUP_QUEUE"
+queue = "REPLACE_WITH_STAGING_BACKUP_QUEUE"
 
 [[queues.consumers]]
-queue = "REPLACE_WITH_BACKUP_QUEUE"
+queue = "REPLACE_WITH_STAGING_BACKUP_QUEUE"
 max_batch_size = 10
 max_batch_timeout = 5
 max_retries = 10
-dead_letter_queue = "REPLACE_WITH_BACKUP_DEAD_QUEUE"
+dead_letter_queue = "REPLACE_WITH_STAGING_BACKUP_DEAD_QUEUE"
 max_concurrency = 2
 retry_delay = 60
 
 [[d1_databases]]
 binding = "DB"
-database_name = "silex-registry"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_name = "REPLACE_WITH_STAGING_D1_NAME"
+database_id = "REPLACE_WITH_STAGING_D1_ID"
 migrations_dir = "migrations"
 
 [[r2_buckets]]
 binding = "OBJECTS"
-bucket_name = "REPLACE_WITH_R2_BUCKET"
+bucket_name = "REPLACE_WITH_STAGING_R2_BUCKET"

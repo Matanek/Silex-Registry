@@ -1,23 +1,14 @@
 # Exploiter le registre Cloudflare
 
-## État de la bascule
+## État du service
 
-Le Worker `silex-registry-staging-probe.silex-lang.workers.dev` est un banc
-public isolé du registre officiel. D1/R2 staging contiennent 155 versions,
-30 noms réservés et 171 objets distincts. L'instance de production distincte
-`silex-registry.silex-lang.workers.dev` emploie `wrangler.production.toml`,
-la base D1 et le bucket R2 `silex-registry`. Elle a reçu les 155 versions,
-30 noms et 171 objets depuis une sauvegarde vérifiée ; son adresse
-`workers.dev` sert aux contrôles avant le domaine officiel. La lecture de
-STD et de l'artefact SDL, l'installation puis l'exécution d'un consommateur
-ont réussi. La copie locale
-`Backups/Silex-Registry/cloudflare-production-precutover-20260918T0720Z` est
-un témoin historique de la bascule ; l'exploitation courante n'en dépend pas.
-Le client compatible Silex `0.45.0` est publié. Il utilisait l'index `/v1`
-tant que la capacité `/v2/capabilities` était absente et choisit D1/R2 depuis
-l'activation du domaine officiel.
-Les anciens clients qui lisent les tags Git ne peuvent pas installer les
-versions stockées sur Cloudflare.
+Le registre public emploie un Worker, une base D1 et un bucket R2 dédiés. Les
+configurations contenant les identifiants de ces ressources restent locales et
+sont ignorées par Git. La lecture de STD et d'un gros artefact natif,
+l'installation, la publication d'auteur et l'exécution d'un consommateur ont
+réussi. Le client compatible Silex `0.45.0` choisit le protocole D1/R2 grâce à
+`/v2/capabilities`. Les anciens clients qui lisent uniquement les tags Git ne
+peuvent pas installer les versions stockées sur Cloudflare.
 
 ## Préparer et qualifier une destination
 
@@ -48,18 +39,18 @@ octet actuel ne peut remplacer ces objets sans preuve d'identité.
 ## Copies et reprise
 
 Le registre de production copie chaque publication vers le bucket privé
-Backblaze B2 `silex-registry-backup-99527982`, sous `registry/production`.
+Backblaze B2 désigné par `BACKUP_BUCKET`, sous le préfixe configuré.
 Les objets binaires sont adressés par SHA-256 ; les descripteurs de publication
 et un instantané déterministe des propriétaires et versions complètent la
 copie. Chaque envoi porte son checksum S3, emploie le chiffrement serveur AES256
 et reçoit une rétention Object Lock en mode Governance de 90 jours. Une
 publication n'est rendue visible qu'après l'enregistrement de ses éléments
-dans la file Cloudflare `silex-registry-backup`.
+dans la file Cloudflare configurée par Wrangler.
 
 Le consommateur de cette file relit les octets depuis R2 et les métadonnées
 depuis D1, écrit B2, puis vérifie taille et SHA-256 par `HEAD` avant
-d'acquitter le message. Les échecs sont rejoués et finissent dans
-`silex-registry-backup-dead` après dix tentatives. Le cron Cloudflare
+d'acquitter le message. Les échecs sont rejoués et finissent dans la file
+d'échec configurée après dix tentatives. Le cron Cloudflare
 `15 3 * * *` produit un nouvel instantané et supprime les sessions d'upload
 expirées. Aucune machine personnelle, tâche `launchd` ou copie locale n'est
 requise pour cette maintenance.
@@ -75,13 +66,11 @@ télécharger une source publique et refaire une connexion auteur avant toute
 bascule DNS. Les sessions de connexion ne sont pas sauvegardées ; les droits
 de noms restent attachés aux identifiants GitHub stables.
 
-La qualification du 19 septembre 2026 a copié 171 objets pour 288 930 458
-octets, 155 publications et 30 propriétaires dans B2. Une restauration dans
-des ressources Cloudflare neuves a recréé exactement ces comptes ; la source
-`STD@0.22.0` relue depuis le Worker restauré avait la taille et le SHA-256
-attendus. Les ressources de restauration ont ensuite été supprimées. Le
-préfixe staging reste conservé par Object Lock comme preuve de qualification,
-mais `BACKUP_REQUIRED=0` y empêche toute croissance future.
+La qualification a copié l'intégralité du corpus dans B2. Une restauration
+dans des ressources Cloudflare neuves a recréé exactement les propriétaires,
+versions et objets attendus. Les ressources de restauration ont ensuite été
+supprimées. Le préfixe de qualification reste conservé par Object Lock, mais
+`BACKUP_REQUIRED=0` y empêche toute croissance future.
 
 `admin/export-store.mjs` et `admin/restore-backup.mjs` restent disponibles pour
 une copie manuelle ponctuelle. Ils ne participent plus à la continuité du
@@ -97,103 +86,50 @@ sessions bloquées, latence des gros objets, occupation D1/R2, opérations et
 coût facturé. Alerter sur les copies ou purges en échec, les fragments trop
 anciens, la hausse durable des 5xx et l'approche des quotas.
 
-Le corpus représente 288 930 458 octets d'objets uniques, hors sessions et
-croissance. L'artefact SDL de 51 047 580 octets exerce la voie des gros
-objets. Relever dans le compte cible le plan, les quotas Workers/D1/R2 et
-les lectures/écritures avant la bascule. Le Worker refuse une nouvelle
-publication si le volume logique unique dépasserait 8 Gio, afin de garder une
-marge sous les 10 Go gratuits de B2. Ce garde-fou ne remplace pas les plafonds
-et alertes du compte Backblaze. Aucun upgrade payant n'est implicite.
-À la fin des essais, l'inventaire direct du Worker de staging trouve 171 objets
-canoniques pour 288 930 458 octets et aucun fragment d'upload ;
-D1 occupe 2 023 424 octets. La restauration garde une seconde copie R2 du
-même corpus ; les deux buckets totalisent donc au moins 577 860 916 octets
-hors fragments temporaires. Les seuils publics actuels du plan gratuit sont
-100 000 requêtes Worker par jour avec 10 ms de CPU par invocation,
-5 millions de lignes D1 lues et 100 000
-écrites par jour, 5 Go D1, et pour R2 Standard 10 Go-mois, 1 million
-d'opérations A et 10 millions B par mois. Ces mesures de stockage sont sous
-les allocations publiées. Les captures du tableau de bord fournies le
-18 septembre 2026 affichent, pour la période courante R2, 0,00 $ d'usage
-facturable, 3,56 milliers d'opérations A, 9,86 milliers d'opérations B et
-288,94 Mo de stockage total. La page D1 affiche aussi 0,00 $ d'usage
-facturable, 430,65 milliers de lignes lues, 9,11 milliers écrites et
-4,06 Mo de stockage total, avec deux bases sur dix permises. Cette limite de
-dix bases indique le forfait Workers Free selon les
-[limites D1](https://developers.cloudflare.com/d1/platform/limits/) ; c'est
-une déduction de la capture, qui ne nomme pas directement le forfait.
-L'analytique
-Workers sur 24 heures indique environ 6,94 milliers d'invocations, zéro
-erreur et un P90 CPU de 5 ms. Le forfait Workers Free ne comporte pas de frais
-fixes selon les [tarifs Workers](https://developers.cloudflare.com/workers/platform/pricing/).
-Les captures étayent donc l'absence d'usage facturable du registre dans les
-vues D1/R2 et l'application probable du forfait gratuit Workers. Elles ne
-constituent pas une facture globale du compte ni une garantie pour le trafic
-futur ; contrôler la facturation et les quotas au moment de la bascule.
+Le Worker refuse une nouvelle publication si le volume logique unique dépasse
+8 Gio, afin de garder une marge sous l'allocation gratuite B2. Ce garde-fou ne
+remplace pas les plafonds et alertes du compte Backblaze. Aucun upgrade payant
+n'est implicite. Contrôler régulièrement les tableaux de bord et les limites
+publiées ; ne jamais publier dans Git les captures, identifiants de ressources
+ou détails de facturation du compte.
 
-La même capture R2 affiche 264 objets dans le bucket de staging. Un inventaire
-complet du bucket, lu ensuite par un Worker local éphémère avec binding R2 réel,
-trouve exactement 171 objets canoniques, zéro fragment et zéro autre clé, pour
-288 930 458 octets. Le compteur de la capture ne décrit donc pas l'état lu à
-ce contrôle ; sa date de rafraîchissement effective reste inconnue. Ne supprimer
-aucun objet sur la seule foi des compteurs du tableau de bord.
 Consulter les références officielles [Workers](https://developers.cloudflare.com/workers/platform/limits/),
 [D1](https://developers.cloudflare.com/d1/platform/pricing/) et
-[R2](https://developers.cloudflare.com/r2/pricing/) avant l'activation.
+[R2](https://developers.cloudflare.com/r2/pricing/).
 
 ## Déploiement et retour arrière
 
 ### Domaine officiel
 
-Depuis le 18 septembre 2026, les serveurs DNS autoritaires de
-`silex-lang.org` sont `clayton.ns.cloudflare.com` et
-`irma.ns.cloudflare.com`. La zone Cloudflare est active. L'ancien A
-`registry` vers `92.222.25.45` a été retiré, puis Wrangler a attaché
+La zone DNS Cloudflare est active. Wrangler attache
 `registry.silex-lang.org` au Worker de production par Custom Domain. Le
-certificat HTTPS est valide et `/v2/capabilities` retourne
-`silex-registry-v2`. L'apex du site garde son A vers la VPS en DNS only ; les
-trois MX OVH et le SPF ont été préservés. DNSSEC est actif chez Cloudflare et
-le DS correspondant est actif chez OVH.
+certificat HTTPS est valide, `/v2/capabilities` retourne
+`silex-registry-v2` et DNSSEC est actif. Les autres services du domaine sont
+gérés indépendamment du registre.
 
-Le DNS partiel qui conserverait OVH comme autorité requiert Business ou
-Enterprise ; la délégation d'un sous-domaine à Cloudflare requiert Enterprise.
-La zone complète active permet le Custom Domain sur l'offre gratuite.
 Voir les [Custom Domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/),
 les [configurations DNS](https://developers.cloudflare.com/dns/zone-setups/),
-le [DNS partiel](https://developers.cloudflare.com/dns/zone-setups/partial-setup/setup/)
 et la [délégation](https://developers.cloudflare.com/dns/zone-setups/subdomain-setup/setup/).
 
-L'inventaire OVH de huit entrées a servi à copier les six entrées de service
-dans Cloudflare avant la délégation. La lecture anonyme de `STD@0.22.0` depuis
-le domaine officiel a réussi avec Silex `0.45.0`. La publication d'auteur,
-la copie B2 et une restauration complète ont aussi été qualifiées.
-Un retour aux anciens serveurs de noms après une nouvelle publication
-Cloudflare masquerait cette version ; privilégier un Worker compatible ou une
-restauration sur Cloudflare.
+La lecture anonyme de `STD@0.22.0` depuis le domaine officiel a réussi avec
+Silex `0.45.0`. La publication d'auteur, la copie B2 et une restauration
+complète ont aussi été qualifiées.
 
 Déployer code et migrations compatibles sans changer le nom public. La route
 publique `/v2/capabilities` répond avec le protocole
 `silex-registry-v2` ; son absence sur l'ancien serveur maintenait les nouveaux
 clients sur `/v1`, tandis qu'une erreur réseau arrêtait la résolution.
 Sur la version Worker exacte, répéter lecture, publication, installation,
-intégrité et restauration. Une copie du magasin a précédé la bascule. Garder
-la VPS et ses sauvegardes indépendantes pendant l'observation initiale.
+intégrité et restauration.
 
 Un Worker antérieur ne peut être réactivé que s'il lit le schéma D1 et les
 objets écrits par le nouveau. Les migrations doivent rester additives. Avant
 la bascule, revenir à la version Worker antérieure et revérifier la lecture
-si le déploiement échoue. Après une nouvelle publication sur Cloudflare,
-renvoyer le DNS vers l'ancien registre rendrait cette version invisible :
-garder le routage Cloudflare, restaurer un Worker compatible ou restaurer une
-copie complète dans une autre instance. Réconcilier toute version créée depuis
-la dernière copie ; ne pas l'écraser. Retirer la VPS seulement après copies
-hors compte, surveillance et décision explicite.
-
-L'essai de staging a déployé temporairement la version Worker
-`240443de-830d-4cc9-af42-f2a710b0c6c6`, relu `STD@0.16.0/source` avec son
-SHA-256 historique, puis rétabli la version
-`f84371bb-5e67-476a-b26b-60062ed9e8c1` et revérifié les mêmes octets.
-Cloudflare conserve D1/R2 lors d'un retour arrière du code ; cet essai ne
-prouve pas qu'un Worker incompatible avec de futures migrations serait sûr.
+si le déploiement échoue. Après une nouvelle publication, garder le routage
+Cloudflare, restaurer un Worker compatible ou restaurer une copie complète
+dans une autre instance. Réconcilier toute version créée depuis la dernière
+copie ; ne pas l'écraser. Cloudflare conserve D1/R2 lors d'un retour arrière du
+code ; cela ne prouve pas qu'un Worker incompatible avec de futures migrations
+serait sûr.
 La [procédure Cloudflare de rollback](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/)
 précise aussi ses limites de bindings et de versions disponibles.

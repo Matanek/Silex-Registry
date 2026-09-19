@@ -33,6 +33,9 @@ jobs:
           done < <(git diff --name-status "$BASE_SHA" HEAD -- registry/v1/packages)
           exit "$invalid"
 
+      - name: Reject sensitive literals and private deployment files
+        run: node scripts/audit-public-repository.mjs
+
       - name: Validate and build the registry
         run: node scripts/build-registry.mjs dist/v1
 

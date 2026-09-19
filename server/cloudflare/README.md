@@ -1,12 +1,13 @@
-# Service Cloudflare candidat du registre Silex
+# Registre Silex sur Cloudflare
 
-Ce Worker expérimental met à l'épreuve le protocole `/v2` du candidat Silex avec
-D1 pour les sessions et versions, et R2 pour les segments puis objets canoniques.
-Il n'est pas le registre public : son jeton unique de banc et ses tables
-`probe_*` sont propres aux essais. L'admission borne les sources compressées à
+Le registre public utilise un Worker Cloudflare, D1 pour les sessions et
+versions, et R2 pour les segments puis objets canoniques. Les tables conservent
+leur préfixe historique `probe_*`. L'admission borne les sources compressées à
 32 Mio, leur contenu à 48 Mio et chaque artefact distinct à 64 Mio.
 
-Le stockage local est celui de Wrangler. Depuis ce dossier :
+Les configurations réelles Wrangler sont locales et ignorées par Git. Copier
+`wrangler.staging.example.toml` vers `wrangler.toml`, renseigner ses variables,
+puis, depuis ce dossier :
 
 ```sh
 npm ci
@@ -15,8 +16,9 @@ npm ci
 
 Créer `.dev.vars` avec `STAGING_TOKEN_SHA256`, empreinte SHA-256 d'un jeton de
 64 caractères hexadécimaux propre au banc, et `LOGIN_KEY_B64`, clé aléatoire
-de 32 octets encodée en base64. Le Client ID GitHub public est dans les fichiers
-Wrangler. `PROBE_ALLOW_FAULTS=1` active localement les points d'interruption
+de 32 octets encodée en base64. Renseigner aussi le Client ID public de
+l'application GitHub dans la configuration locale. `PROBE_ALLOW_FAULTS=1`
+active localement les points d'interruption
 authentifiés. Puis lancer le Worker :
 
 ```sh
@@ -42,29 +44,13 @@ autorise l’auteur et les droits sur le nom. `Package.json.repository` peut
 indiquer une adresse GitHub à destination des contributeurs ; ce lien facultatif
 n’est pas vérifié, n’accorde aucun droit et ne sert pas à reconstituer la publication.
 
-`wrangler.remote.toml` utilise un Worker local avec bindings sur les ressources
-réelles `silex-registry-staging`. Toute écriture via cette configuration modifie
-le staging Cloudflare. Les scénarios distants exigent un accord explicite pour
-leurs fixtures et leur nettoyage. Utiliser un `PROBE_RUN_ID` alphanumérique
-unique commun à `npm test`, `cli-local.mjs` et `cleanup-remote.mjs` ; le dernier
-produit d'abord un plan et un reçu, puis `--apply` supprime les seuls noms de ce
-run. `PROBE_STORAGE=local` permet de répéter le nettoyage contre l'émulation.
-Le reçu persiste pour reprendre un nettoyage interrompu.
-
-Le Worker de staging autorisé est sur
-`https://silex-registry-staging-probe.silex-lang.workers.dev`. Le CLI candidat
-refuse une origine de test HTTPS : `tests/edge-proxy.mjs` relaie seulement les
-requêtes de qualification depuis `127.0.0.1:8793` vers ce Worker. Démarrer ce
-relais avec `PROBE_UPSTREAM` fixé exactement à cette URL ; employer ensuite
-`PROBE_ORIGIN=http://127.0.0.1:8793` pour le test CLI. Le relais n'est pas un
-composant du registre et ne doit pas être utilisé comme origine produit.
-
-Le staging reste isolé. Une instance distincte est déployée sur
-`https://silex-registry.silex-lang.workers.dev` avec
-`wrangler.production.toml`, avant son rattachement au domaine officiel.
-Le corpus historique et son artefact SDL de 51 047 580 octets ont été lus sur
-les Workers réels. Les quotas et coûts de production demandent encore une
-surveillance réelle.
+Une configuration distante locale peut relier Wrangler à un banc Cloudflare
+isolé. Elle ne doit jamais être committée : identifiants du compte, D1, R2,
+Queues et B2 restent hors du dépôt. Les scénarios distants exigent un accord
+explicite pour leurs fixtures et leur nettoyage. Utiliser un `PROBE_RUN_ID`
+alphanumérique unique commun à `npm test`, `cli-local.mjs` et
+`cleanup-remote.mjs` ; le dernier produit d'abord un plan et un reçu, puis
+`--apply` supprime les seuls noms de ce run.
 
 Avant tout import historique, `admin/validate-bundle.mjs BUNDLE PLAN OWNERS`
 contrôle en lecture seule l'ordre des 155 versions, les preuves de propriété,
@@ -122,8 +108,8 @@ l'expiration. Le script exige `REGISTRY_MAINTENANCE_TOKEN`. Il peut être relanc
 après une interruption : la session D1 est supprimée seulement après ses
 fragments. Les objets canoniques publiés ne sont jamais visés par cette purge.
 
-La [procédure d'exploitation](OPERATIONS.md) décrit la bascule, les copies,
-les alertes et le retour arrière avant toute activation publique.
+La [procédure d'exploitation](OPERATIONS.md) décrit le déploiement, les copies,
+les alertes et le retour arrière.
 
 Le Worker de production porte le cron quotidien de purge des sessions et de
 création d'instantané B2. `admin/run-maintenance.mjs` reste un outil manuel de

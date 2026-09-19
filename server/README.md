@@ -1,9 +1,9 @@
 # Historical PHP/SQLite durable registry prototype
 
-This subtree records the former VPS candidate. The Cloudflare Worker under
-[cloudflare](cloudflare/README.md) is the current publication candidate. The
-steps below remain useful for reproducing old migration evidence and must not
-be used as the Cloudflare deployment procedure.
+This subtree records the former local durable-store prototype. The Cloudflare
+Worker under [cloudflare](cloudflare/README.md) is the production service. The
+steps below remain useful for reproducing migration evidence and must not be
+used as a deployment procedure.
 
 This is a local `/v2` storage prototype, not a deployed replacement for `/v1`.
 The existing static build and deployment are unchanged. HTTP login creates an
@@ -69,7 +69,7 @@ The independent HTTP client also submits a highly compressible source that excee
 the test expansion limit and a PHP canary inside a published archive. It checks
 that the former never becomes visible and the latter is returned only as binary
 data, without creating the canary file. This does not prove process-account or
-web-server isolation on the VPS.
+production web-server isolation.
 
 `tests/fixture.php` is CLI-only, outside `public/`, and injects identities and
 short-lived tokens directly into the test database. Crash hooks are injected
